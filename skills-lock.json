@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "esimaccess-api": {
+      "source": "esimaccess/esimaccess-api",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "b5d60ee49d02e94a984589bf9072b4eb4b2d038e2dcc857357651f1ec1314d71"
+    }
+  }
+}
