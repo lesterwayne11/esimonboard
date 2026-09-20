@@ -5,6 +5,7 @@ import {
   ChevronDown,
   CircleAlert,
   Clipboard,
+  CreditCard,
   Globe2,
   LoaderCircle,
   MapPin,
@@ -104,10 +105,16 @@ function PlanCard({ plan, index, selected, onCompare, onBuy }: {
 function PurchaseModal({ plan, onClose }: { plan: EsimPlan; onClose: () => void }) {
   const [, navigate] = useLocation();
   const order = useCreateEsimOrder();
+  const [step, setStep] = useState<'review' | 'payment'>('review');
+  const [demoProcessing, setDemoProcessing] = useState(false);
   const submit = () => {
-    order.mutate({ data: { packageCode: plan.packageCode, count: 1 } }, {
-      onSuccess: (result) => navigate(`/order/${result.orderNo}`),
-    });
+    setDemoProcessing(true);
+    window.setTimeout(() => {
+      order.mutate({ data: { packageCode: plan.packageCode, count: 1 } }, {
+        onSuccess: (result) => navigate(`/order/${result.orderNo}`),
+        onError: () => setDemoProcessing(false),
+      });
+    }, 850);
   };
   return (
     <div className="modal-scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
@@ -122,12 +129,25 @@ function PurchaseModal({ plan, onClose }: { plan: EsimPlan; onClose: () => void 
           <div><span>Data & validity</span><strong>{formatData(plan)} · {formatDuration(plan.duration, plan.durationUnit)}</strong></div>
           <div className="purchase-total"><span>Total today</span><strong>${plan.priceUsd.toFixed(2)}</strong></div>
         </div>
-        <p className="modal-note">Your eSIM is provisioned live after confirmation. We will take you straight to the install details as soon as the network returns them.</p>
+        <div className="demo-payment-banner" data-testid="banner-demo-payment">
+          <ShieldCheck size={17} />
+          <div><strong>Demo checkout mode</strong><span>No customer payment is collected yet. This simulates checkout and uses account credit to provision the eSIM.</span></div>
+        </div>
+        {step === 'review' ? (
+          <p className="modal-note">Review your plan first. The next step is a simulated payment screen for testing the complete customer journey.</p>
+        ) : (
+          <div className="demo-payment-panel" data-testid="panel-demo-payment">
+            <div className="demo-payment-heading"><CreditCard size={18} /><div><strong>Test payment</strong><span>Nothing will be charged</span></div></div>
+            <div className="fake-payment-field"><span>Payment method</span><b>Demo card ···· 4242</b></div>
+            <div className="fake-payment-field"><span>Billing total</span><b>${plan.priceUsd.toFixed(2)} USD</b></div>
+            <p className="modal-note">When real payments are added, this step will be replaced by a secure payment checkout.</p>
+          </div>
+        )}
         {order.isError && <div className="modal-error" data-testid="status-purchase-error">We could not place this order. Check your account credit and try again.</div>}
         <div className="modal-actions">
-          <button className="button-quiet" onClick={onClose} data-testid="button-cancel-purchase">Not yet</button>
-          <button className="button-primary" onClick={submit} disabled={order.isPending} data-testid="button-confirm-purchase">
-            {order.isPending ? <><LoaderCircle size={16} className="spin" /> Provisioning</> : <>Confirm purchase <ArrowRight size={15} /></>}
+          <button className="button-quiet" onClick={step === 'payment' && !demoProcessing ? () => setStep('review') : onClose} data-testid="button-cancel-purchase">{step === 'payment' ? 'Back' : 'Not yet'}</button>
+          <button className="button-primary" onClick={step === 'review' ? () => setStep('payment') : submit} disabled={demoProcessing || order.isPending} data-testid="button-confirm-purchase">
+            {demoProcessing || order.isPending ? <><LoaderCircle size={16} className="spin" /> Provisioning</> : step === 'review' ? <>Continue to demo payment <ArrowRight size={15} /></> : <>Simulate payment & provision <ArrowRight size={15} /></>}
           </button>
         </div>
       </section>

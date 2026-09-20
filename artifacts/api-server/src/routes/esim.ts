@@ -72,7 +72,7 @@ async function fetchOrderDetails(orderNo: string): Promise<EsimDetails | null> {
   });
 
   if (!result.success || !result.obj?.esimList?.length) {
-    if (result.errorCode === "200002") {
+    if (result.errorCode === "200002" || result.errorCode === "200010") {
       return null;
     }
     throw new EsimAccessError(

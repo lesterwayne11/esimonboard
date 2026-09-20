@@ -253,6 +253,20 @@
 .purchase-total strong { color: hsl(var(--primary)); font-family: var(--app-font-display); font-size: 24px; }
 .modal-note { color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.6; margin: 0 0 20px; }
 .modal-error { background: hsl(5 68% 51% / .1); border-radius: 10px; color: hsl(var(--destructive)); font-size: 12px; margin-bottom: 14px; padding: 10px; }
+.demo-payment-banner {
+  align-items: flex-start; background: hsl(171 56% 32% / .08); border: 1px solid hsl(171 56% 32% / .18);
+  border-radius: 12px; color: hsl(var(--primary)); display: flex; gap: 10px; margin: 0 0 18px; padding: 12px;
+}
+.demo-payment-banner > div, .demo-payment-heading > div { display: grid; gap: 3px; }
+.demo-payment-banner strong, .demo-payment-heading strong { font-size: 12px; }
+.demo-payment-banner span, .demo-payment-heading span { color: hsl(var(--muted-foreground)); font-size: 11px; line-height: 1.45; }
+.demo-payment-panel { background: hsl(var(--secondary)); border-radius: 14px; margin-bottom: 18px; padding: 15px; }
+.demo-payment-heading { align-items: center; display: flex; gap: 10px; margin-bottom: 15px; }
+.demo-payment-heading svg { color: hsl(var(--primary)); }
+.fake-payment-field { align-items: center; border-top: 1px solid hsl(var(--border)); display: flex; justify-content: space-between; padding: 12px 0 0; }
+.fake-payment-field + .fake-payment-field { margin-top: 11px; }
+.fake-payment-field span { color: hsl(var(--muted-foreground)); font-size: 12px; }
+.fake-payment-field b { font-family: var(--app-font-mono); font-size: 12px; }
 .modal-actions { display: flex; gap: 9px; }
 .modal-actions button { flex: 1; }
 .order-page { margin: 0 auto; max-width: 920px; padding: 30px 28px 90px; }
