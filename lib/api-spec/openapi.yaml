@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: esim
+    description: Live eSIM catalog and ordering
 paths:
   /healthz:
     get:
@@ -24,6 +26,117 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /esim/plans:
+    get:
+      operationId: getEsimPlans
+      tags: [esim]
+      summary: List eSIM plans
+      description: Returns live eSIM plans from the connected eSIM Access account.
+      parameters:
+        - name: locationCode
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+        - name: iccid
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+      responses:
+        "200":
+          description: Live eSIM plans
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimPlansResponse"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /esim/balance:
+    get:
+      operationId: getEsimBalance
+      tags: [esim]
+      summary: Get account balance
+      responses:
+        "200":
+          description: Current account balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimBalance"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /esim/orders:
+    post:
+      operationId: createEsimOrder
+      tags: [esim]
+      summary: Purchase an eSIM
+      description: Places a live order against the connected eSIM Access account and waits briefly for provisioning details.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EsimOrderInput"
+      responses:
+        "201":
+          description: Purchased eSIM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimOrder"
+        "400":
+          description: Invalid request or insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /esim/orders/{orderNo}:
+    get:
+      operationId: getEsimOrder
+      tags: [esim]
+      summary: Get eSIM order status
+      parameters:
+        - name: orderNo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: eSIM order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimOrder"
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +146,139 @@ components:
           type: string
       required:
         - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    EsimPlan:
+      type: object
+      properties:
+        packageCode:
+          type: string
+        name:
+          type: string
+        location:
+          type: string
+        priceUsd:
+          type: number
+        retailPriceUsd:
+          type: number
+        volumeBytes:
+          type: number
+        dataGb:
+          type: number
+        duration:
+          type: number
+        durationUnit:
+          type: string
+        supportTopUp:
+          type: boolean
+        speed:
+          type: string
+        activeType:
+          type: number
+      required:
+        - packageCode
+        - name
+        - location
+        - priceUsd
+        - retailPriceUsd
+        - volumeBytes
+        - dataGb
+        - duration
+        - durationUnit
+        - supportTopUp
+        - speed
+        - activeType
+    EsimPlansResponse:
+      type: object
+      properties:
+        plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/EsimPlan"
+        regions:
+          type: array
+          items:
+            type: string
+        total:
+          type: number
+      required:
+        - plans
+        - regions
+        - total
+    EsimBalance:
+      type: object
+      properties:
+        balanceUsd:
+          type: number
+      required:
+        - balanceUsd
+    EsimOrderInput:
+      type: object
+      properties:
+        packageCode:
+          type: string
+          minLength: 1
+        count:
+          type: number
+          minimum: 1
+          maximum: 1
+      required:
+        - packageCode
+    EsimOrder:
+      type: object
+      properties:
+        orderNo:
+          type: string
+        transactionId:
+          type: string
+        packageCode:
+          type: string
+        packageName:
+          type: string
+        priceUsd:
+          type: number
+        status:
+          type: string
+        smdpStatus:
+          type: string
+        iccid:
+          type: ["string", "null"]
+        esimTranNo:
+          type: ["string", "null"]
+        qrCodeUrl:
+          type: ["string", "null"]
+        shortUrl:
+          type: ["string", "null"]
+        totalVolumeBytes:
+          type: ["number", "null"]
+        dataGb:
+          type: ["number", "null"]
+        totalDuration:
+          type: ["number", "null"]
+        durationUnit:
+          type: ["string", "null"]
+        expiresAt:
+          type: ["string", "null"]
+      required:
+        - orderNo
+        - transactionId
+        - packageCode
+        - packageName
+        - priceUsd
+        - status
+        - smdpStatus
+        - iccid
+        - esimTranNo
+        - qrCodeUrl
+        - shortUrl
+        - totalVolumeBytes
+        - dataGb
+        - totalDuration
+        - durationUnit
+        - expiresAt
 

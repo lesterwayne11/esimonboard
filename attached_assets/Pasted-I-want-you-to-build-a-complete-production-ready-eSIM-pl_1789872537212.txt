@@ -1,0 +1,884 @@
+I want you to build a complete production-ready eSIM platform called:
+
+ESIM ONBOARD
+
+This will be a mobile-first, app-like eSIM application built with Next.js and deployed on Vercel.
+
+I want a functional eSIM platform with:
+
+Customer accounts
+Guest access
+Personal eSIM dashboard
+eSIM purchase
+ICCID search
+Data usage/balance display
+eSIM top-up
+QR code display
+PHP pricing
+Markup management
+Maya payments
+eSIMAccess integration
+Admin dashboard
+Orders
+Customers
+Payments
+Top-ups
+Profit tracking
+The application should communicate directly with eSIMAccess, Maya, and Supabase through the appropriate server-side architecture.
+
+==================================================
+
+BRAND ==================================================
+Application name:
+
+ESIM Onboard
+
+Target market:
+
+Primarily seafarers.
+
+The application should be designed around the needs of seafarers who want to:
+
+Buy an eSIM
+Check remaining data
+Check data usage
+Check expiration
+Top up an existing eSIM
+Access their QR code
+Quickly manage their eSIM from a phone
+The UI should be:
+
+Clean
+Modern
+Professional
+Mobile-first
+Fast
+Simple
+Easy to understand
+App-like
+Do not make the interface unnecessarily complicated.
+
+================================================== 2. IMPORTANT TECHNOLOGY STACK
+Use:
+
+Next.js
+TypeScript
+Tailwind CSS
+Supabase
+Vercel
+eSIMAccess API
+Maya API
+Use server-side API routes/server actions where appropriate.
+
+Avoid unnecessary dependencies.
+
+Keep the architecture simple and maintainable.
+
+================================================== 3. MOBILE APP-LIKE EXPERIENCE
+The ESIM Onboard application will be deployed on Vercel.
+
+It must be designed as a mobile-first application and should feel like a real mobile app when opened on Android or iPhone.
+
+It should NOT feel like a desktop website squeezed onto a phone.
+
+Create:
+
+Mobile-first layout
+Responsive design
+App-style navigation
+Mobile-friendly buttons
+Bottom navigation where appropriate
+Mobile-friendly forms
+Mobile-friendly checkout
+Mobile-friendly QR code display
+PWA support
+Web app manifest
+Add to Home Screen support
+App-style loading states
+App-style error states
+The backend architecture should also be suitable for a future native Android/iOS application.
+
+Do not build separate backend systems for mobile and desktop.
+
+Use one backend.
+
+================================================== 4. CURRENCY
+The entire ESIM Onboard customer-facing application must use:
+
+PHILIPPINE PESO (PHP / ₱)
+
+Do NOT display USD to customers.
+
+Examples:
+
+₱200 ₱265 ₱450
+
+All customer prices must be displayed in PHP.
+
+Admin pricing, sales, fees, and profit calculations should also be displayed in PHP.
+
+================================================== 5. CUSTOMER ENTRY SCREEN
+Create a simple mobile-first welcome/login screen.
+
+Example:
+
+ESIM ONBOARD
+
+[ LOGIN ]
+
+Email Password
+
+[ LOGIN ]
+
+Forgot Password
+
+Create Account
+
+[ CONTINUE AS GUEST ]
+
+Do NOT require email verification during normal account registration.
+
+Customers should be able to register and immediately use the application.
+
+================================================== 6. CUSTOMER ACCOUNT
+Use Supabase Auth.
+
+Customers should be able to:
+
+Create account
+Login
+Logout
+Reset password
+Manage their account
+Do NOT require email verification during normal registration.
+
+Keep the authentication architecture compatible with enabling email verification later if needed.
+
+Customer accounts should allow customers to access their own:
+
+eSIMs
+Orders
+ICCIDs
+Top-ups
+Payment/order history
+QR codes
+Do not rely only on frontend authorization.
+
+Authorization must be enforced server-side and at the database level.
+
+================================================== 7. CUSTOMER DASHBOARD
+After login, the customer should immediately see their eSIM dashboard.
+
+The most important question the dashboard should answer is:
+
+"How much data do I have left?"
+
+Example:
+
+ESIM ONBOARD
+
+Hello, Juan 👋
+
+JAPAN 10 GB / 30 Days
+
+Used: 3.2 GB
+
+Remaining: 6.8 GB
+
+Expires: October 15, 2026
+
+[ TOP UP ]
+
+[ VIEW QR CODE ]
+
+If the customer owns multiple eSIMs, display them as separate cards.
+
+Example:
+
+Japan 10 GB / 30 Days Used: 3.2 GB Remaining: 6.8 GB Expires: Oct 15
+
+[TOP UP] [QR CODE]
+
+Singapore 5 GB / 30 Days Used: 2.9 GB Remaining: 2.1 GB
+
+[TOP UP] [QR CODE]
+
+The dashboard should be extremely easy to understand for seafarers.
+
+================================================== 8. eSIM DATA USAGE
+Retrieve actual eSIM information from eSIMAccess when supported.
+
+Possible information:
+
+ICCID
+Country
+Plan
+Data allowance
+Data used
+Remaining data
+Expiration
+eSIM status
+Activation status
+Network/operator information if available
+Do NOT invent usage information.
+
+If eSIMAccess does not provide a particular field, do not fake it.
+
+Only calculate remaining data if the actual API response provides sufficient information to safely calculate it.
+
+Provide a mechanism to refresh/synchronize eSIM status and usage from eSIMAccess.
+
+================================================== 9. GUEST ACCESS
+Provide:
+
+CONTINUE AS GUEST
+
+Customers should not be forced to create an account just to check an existing eSIM.
+
+Guest users should be able to securely access their eSIM information.
+
+Guest flow can use:
+
+ICCID
+
+Guest users should be able to:
+
+Check supported data usage
+Check remaining data
+Check expiration
+View their QR code when appropriate
+Top up
+View relevant order/eSIM information
+Guest users must NOT be able to access another customer's:
+
+Orders
+eSIMs
+Payment information
+Account information
+================================================== 10. BUY NEW ESIM
+Customer flow:
+
+Browse plans ↓ Select country ↓ Select eSIM plan ↓ View plan details ↓ See final PHP price ↓ Checkout ↓ MAYA payment ↓ Payment verified ↓ Purchase eSIM through eSIMAccess ↓ Save transaction ↓ Display QR code ↓ Display installation information
+
+================================================== 11. ESIM PRODUCT CATALOG
+Create an eSIM product catalog.
+
+Customers should be able to:
+
+Search countries
+Browse countries
+Browse regions
+Filter plans
+View data allowance
+View validity
+View network information if available
+View price
+Select a plan
+Purchase
+Example plans:
+
+Japan 1 GB / 7 Days ₱200
+
+Japan 3 GB / 15 Days ₱265
+
+Japan 5 GB / 30 Days ₱325
+
+Japan 10 GB / 30 Days ₱450
+
+These are examples only.
+
+Do not hard-code these as final prices.
+
+Pricing must be controlled by the admin pricing system.
+
+================================================== 12. ESIMACCESS API
+I already have access to the eSIMAccess API and have an eSIMAccess skill.md/API documentation available.
+
+IMPORTANT:
+
+Before implementing eSIMAccess functionality, inspect and follow the actual eSIMAccess skill.md/API documentation.
+
+Do NOT invent:
+
+API endpoints
+Parameters
+Response formats
+Authentication methods
+Top-up endpoints
+ICCID lookup behavior
+Use the actual documented API.
+
+If a particular feature is not supported by the API, clearly identify that limitation instead of creating fake functionality.
+
+================================================== 13. ICCID SEARCH
+Create:
+
+SEARCH ICCID / TOP UP
+
+Customer enters ICCID.
+
+Example:
+
+ICCID: 8988XXXXXXXXXXXX
+
+[ SEARCH ]
+
+The application should use the actual eSIMAccess API to retrieve available information.
+
+If supported, display:
+
+ICCID
+eSIM status
+Data allowance
+Data used
+Remaining data
+Expiration
+Activation status
+Other useful supplier-provided information
+Do not expose:
+
+API keys
+Supplier credentials
+Internal API information
+Supplier cost
+================================================== 14. TOP-UP
+After successfully finding an eSIM, display:
+
+[ TOP UP ]
+
+Show only top-up packages that are actually compatible with that eSIM according to the eSIMAccess API.
+
+Flow:
+
+Enter ICCID ↓ Search ↓ Find eSIM ↓ Show data usage/status ↓ Select compatible top-up package ↓ Show PHP price ↓ Checkout ↓ HitPay payment ↓ Payment confirmed ↓ Submit top-up through eSIMAccess ↓ Save transaction ↓ Show result ↓ Refresh eSIM information
+
+Possible top-up statuses:
+
+Payment Pending
+Paid
+Processing
+Successful
+Failed
+Cancelled
+Do not mark a top-up successful until eSIMAccess confirms success.
+
+================================================== 15. QR CODE
+After a successful eSIM purchase, display the eSIM QR code INSIDE the ESIM Onboard application.
+
+Do not depend on Make.com.
+
+If eSIMAccess returns:
+
+QR code
+Activation code
+SM-DP+ address
+Matching ID
+Other installation information
+Use the actual API response.
+
+If QR generation is required, generate the QR code using the correct activation data returned by eSIMAccess.
+
+Do not invent activation data.
+
+Customers should be able to access the QR code from:
+
+Purchase success page
+My eSIMs
+Order details
+================================================== 16. HITPAY PAYMENT
+Use HitPay directly.
+
+Do NOT use Make.com.
+
+The checkout amount must be in PHP.
+
+Use the actual HitPay API documentation.
+
+Support payment methods available to the merchant's HitPay account, including applicable Philippine methods such as:
+
+GCash
+QRPh
+Cards
+Bank/payment methods supported by HitPay
+Do not assume every payment method is automatically available.
+
+================================================== 17. PAYMENT SECURITY
+IMPORTANT:
+
+Do NOT consider a payment successful simply because the customer reaches a success/return page.
+
+Use HitPay server-side webhook confirmation.
+
+Payment flow:
+
+Customer ↓ Checkout ↓ HitPay ↓ Payment ↓ HitPay webhook ↓ Verify payment ↓ Mark order PAID ↓ Fulfill eSIM/top-up ↓ Save result ↓ Show customer result
+
+Implement secure webhook verification.
+
+Implement webhook idempotency.
+
+The same webhook must NOT result in multiple eSIM purchases or duplicate top-ups.
+
+================================================== 18. ESIM PURCHASE FULFILLMENT
+Only fulfill an eSIM after confirmed successful payment.
+
+Order state example:
+
+PENDING_PAYMENT ↓ PAID ↓ PROCESSING ↓ COMPLETED
+
+Failure example:
+
+PENDING_PAYMENT ↓ PAYMENT_FAILED
+
+or:
+
+PAID ↓ FULFILLMENT_FAILED
+
+If payment succeeds but eSIMAccess purchase fails:
+
+Do NOT charge the customer again automatically
+Record the failure
+Keep the order visible to admin
+Store supplier/API reference if available
+Allow admin to investigate
+Prevent duplicate fulfillment.
+
+================================================== 19. PRICING / MARKUP
+The system must separate:
+
+Supplier Cost Markup Selling Price Payment Fee Profit
+
+Example:
+
+Supplier cost: ₱150
+
+Markup: ₱50
+
+Selling price: ₱200
+
+Payment fee: ₱X
+
+Estimated net profit: ₱50 - payment fee
+
+The supplier cost must NEVER be shown to customers.
+
+================================================== 20. MARKUP TYPES
+Admin should be able to set:
+
+Fixed PHP markup
+Example:
+
+Supplier cost = ₱100 Markup = ₱50 Selling price = ₱150
+
+Percentage markup
+Example:
+
+Supplier cost = ₱100 Markup = 30% Selling price = ₱130
+
+Support:
+
+GLOBAL MARKUP
+
+and
+
+PRODUCT-SPECIFIC MARKUP
+
+Example:
+
+Global markup: ₱50
+
+Japan 1GB: +₱60
+
+Canada 10GB: +₱100
+
+Product-specific markup overrides global markup.
+
+Admin must be able to change markup without editing source code.
+
+================================================== 21. ADMIN DASHBOARD
+Create a secure admin dashboard.
+
+Only authorized administrators can access it.
+
+Admin sections:
+
+Dashboard Products Pricing / Markup eSIM Orders Top-ups Customers ICCID Search Payments Transactions Settings
+
+Dashboard should show:
+
+Total sales
+Total eSIM sales
+Total top-up sales
+Total orders
+Supplier costs
+Payment fees
+Estimated/net profit
+Recent orders
+Recent top-ups
+Failed transactions
+Pending transactions
+All amounts in PHP.
+
+================================================== 22. ADMIN PRODUCT MANAGEMENT
+Admin should be able to:
+
+View products
+Add products where appropriate
+Edit products
+Enable/disable products
+Set markup
+Set product-specific pricing
+View supplier/base cost
+View selling price
+View estimated profit
+Control product visibility
+Supplier cost should come from eSIMAccess when supported.
+
+Do not expose supplier cost to customers.
+
+================================================== 23. ADMIN ICCID MANAGEMENT
+Admin should be able to search ICCIDs.
+
+Admin can view available eSIM information returned by eSIMAccess.
+
+Show:
+
+ICCID
+Customer
+Order
+Country
+Plan
+Status
+Data usage if supported
+Remaining data if supported
+Expiration
+Top-up history
+Purchase history
+================================================== 24. TOP-UP ADMINISTRATION
+Admin should be able to see:
+
+Top-up ID Order ID ICCID Customer Package Supplier Cost Selling Price Payment Fee Profit Payment Status Top-up Status Supplier Reference Date
+
+================================================== 25. CUSTOMER ORDERS
+Create a proper order system.
+
+Order information may include:
+
+Order ID
+Customer
+Product
+Country
+Plan
+Price
+Currency
+Payment status
+eSIM status
+ICCID
+Supplier transaction/reference ID
+Created date
+Updated date
+Customers can see their own orders.
+
+Admins can see all relevant orders.
+
+================================================== 26. CUSTOMER MY ESIMS
+Create:
+
+MY ESIMS
+
+Each eSIM should show:
+
+Country
+Plan
+Data allowance
+Used data
+Remaining data
+Expiration
+ICCID
+Status
+Activation status
+Actions:
+
+[ VIEW QR CODE ]
+
+[ TOP UP ]
+
+Only show top-up if supported.
+
+================================================== 27. PAYMENT AND PROFIT REPORTING
+Admin should be able to see:
+
+Supplier Cost + Markup
+Selling Price
+
+Then:
+
+Selling Price
+Payment Fee
+Supplier Cost
+Estimated Net Profit
+
+Use actual HitPay transaction fee information when available.
+
+Do not assume a fixed payment fee if the actual fee is available from HitPay.
+
+Customers must never see:
+
+Supplier cost
+Internal markup
+Payment fee
+Profit
+================================================== 28. DATABASE / SUPABASE
+Create a proper Supabase database architecture.
+
+Entities/tables should include appropriate structures for:
+
+Customers/users
+Admins
+Products
+Plans
+Orders
+Order items
+eSIMs
+Top-ups
+Payments
+Transactions
+Pricing/markups
+Webhook events
+Use proper:
+
+Relationships
+Indexes
+Constraints
+Timestamps
+Status fields
+Store:
+
+Supplier transaction/reference IDs
+HitPay payment/reference IDs
+Order IDs
+ICCIDs
+Relevant eSIM information
+Use Row Level Security.
+
+================================================== 29. SECURITY
+NEVER expose:
+
+eSIMAccess API keys
+HitPay API keys
+Supabase service role key
+Webhook secrets
+Other private credentials
+Use Vercel environment variables.
+
+Example:
+
+ESIMACCESS_API_KEY HITPAY_API_KEY HITPAY_WEBHOOK_SECRET SUPABASE_SERVICE_ROLE_KEY
+
+Private credentials must remain server-side.
+
+Do NOT use private keys in:
+
+NEXT_PUBLIC_*
+
+variables.
+
+Validate all customer input.
+
+Validate ICCID format.
+
+Protect admin routes.
+
+Protect customer data.
+
+Prevent IDOR/security issues.
+
+Never expose another customer's orders/eSIMs.
+
+================================================== 30. ERROR HANDLING
+Handle:
+
+Invalid ICCID
+ICCID not found
+eSIMAccess unavailable
+Payment failed
+Payment pending
+Top-up unavailable
+Top-up failed
+eSIM purchase failed
+Payment successful but fulfillment failed
+Duplicate webhook
+Invalid webhook
+Product unavailable
+Supplier balance/availability problems
+Do not expose raw API errors or stack traces to customers.
+
+Show simple messages.
+
+Example:
+
+“Your payment was received, but your eSIM is still being processed. Please check your order status.”
+
+Admin should have detailed internal error information/logs.
+
+================================================== 31. ORDER SAFETY
+Prevent duplicate orders and duplicate fulfillment.
+
+Use:
+
+Internal order IDs
+Supplier transaction/reference IDs
+HitPay payment IDs
+Webhook event IDs
+Idempotency logic
+A successful payment must result in only one fulfillment attempt unless an intentional admin retry is performed.
+
+================================================== 32. GUEST ORDERS
+Support guest purchases.
+
+Guest customers can purchase without creating an account.
+
+Collect appropriate customer information such as email.
+
+After purchase, provide secure access to the order/eSIM.
+
+Do not expose guest orders simply because someone knows an email address or order number.
+
+If a guest later creates an account using the same verified email, provide a secure method to associate eligible guest purchases with the account.
+
+================================================== 33. SEAFARER-FIRST DESIGN
+ESIM Onboard is primarily intended for seafarers.
+
+Prioritize:
+
+Simple login
+Guest access
+Fast loading
+Mobile-first design
+Low complexity
+Easy ICCID search
+Easy data usage checking
+Remaining data visibility
+Expiration visibility
+One-tap top-up
+Easy QR code access
+Minimal steps
+The dashboard should answer quickly:
+
+“How much data do I have left?”
+
+“When does my eSIM expire?”
+
+“Can I top up?”
+
+“Where is my QR code?”
+
+================================================== 34. NAVIGATION
+For logged-in customers, use simple app-style navigation.
+
+Suggested:
+
+HOME MY ESIMS ORDERS ACCOUNT
+
+Important actions should remain easily accessible:
+
+TOP UP BUY ESIM
+
+For mobile, use bottom navigation where appropriate.
+
+================================================== 35. HOME PAGE
+Home page should have:
+
+ESIM ONBOARD branding
+
+Primary actions:
+
+[ BUY ESIM ]
+
+[ CHECK ICCID / TOP UP ]
+
+Then:
+
+Popular destinations
+Available plans
+How it works
+Seafarer-focused information
+Support/contact
+Footer
+Keep it clean.
+
+================================================== 36. PRODUCT SEARCH
+Customers should be able to search and browse eSIM plans.
+
+Search by:
+
+Country
+Region
+Destination
+Filter by:
+
+Data amount
+Validity
+Price
+Only show products/plans that are available.
+
+================================================== 37. INSTALLATION INFORMATION
+After purchase, show appropriate installation instructions.
+
+Depending on eSIMAccess response, display:
+
+QR code
+Activation information
+SM-DP+ address
+Activation code
+Installation instructions
+Only display information actually returned or supported.
+
+Do not invent installation information.
+
+================================================== 38. PWA
+Implement PWA functionality.
+
+Include:
+
+Web app manifest
+App name
+App icon configuration
+Theme configuration
+Add to Home Screen support
+Appropriate mobile viewport
+App-like navigation
+The goal is for customers to be able to add ESIM Onboard to their phone's home screen and use it like an app.
+
+================================================== 39. VERCEL DEPLOYMENT
+The project must be deployable to Vercel.
+
+Prepare:
+
+Production build
+Environment variables
+Server-side API routes
+Webhook endpoints
+Supabase configuration
+HitPay configuration
+eSIMAccess configuration
+Provide a clear list of required Vercel environment variables.
+
+Separate:
+
+Public variables
+Server-only variables
+Secret variables
+Never expose private API keys.
+
+================================================== 40. NO MAKE.COM
+Do NOT use Make.com anywhere in this architecture.
+
+The flow should be:
+
+Customer ↓ Next.js / Vercel ↓ HitPay ↓ HitPay webhook ↓ Next.js server ↓ eSIMAccess ↓ Supabase ↓ ESIM Onboard dashboard …
+
+This response is too long to display in full.
+
+
+

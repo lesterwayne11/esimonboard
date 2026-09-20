@@ -1,6 +1,6 @@
-# [Project name]
+# Roamly eSIM Store
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Roamly is a travel eSIM storefront that loads live plans from eSIM Access and provisions purchased eSIMs.
 
 ## Run & Operate
 
@@ -22,15 +22,22 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/esim-store` — React/Vite storefront with live catalog, balance, purchase, and order-install screens.
+- `artifacts/api-server/src/routes/esim.ts` — server-side eSIM catalog, balance, order, and status routes.
+- `artifacts/api-server/src/lib/esim-access.ts` — HMAC-signed eSIM Access provider client.
+- `lib/api-spec/openapi.yaml` — source of truth for the storefront API contract.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- eSIM Access credentials stay server-side in `ESIM_ACCESS_CODE`; the browser only receives normalized catalog and order data.
+- New orders poll the provider briefly so the storefront can return ICCID and QR install details in the purchase result.
+- The storefront uses the provider's live catalog rather than seeded or hardcoded plan data.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Browse and filter live eSIM plans by country or region.
+- View current account credit and compare plan details.
+- Purchase a live eSIM and open the provisioning result with QR and short install links.
 
 ## User preferences
 
@@ -38,7 +45,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The storefront purchase route places real orders against the connected eSIM Access balance; add customer payment and access control before public launch.
+- Regenerate the API client after every OpenAPI change.
 
 ## Pointers
 

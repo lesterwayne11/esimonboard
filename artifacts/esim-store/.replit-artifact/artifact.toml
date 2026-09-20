@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Roamly eSIM Store"
+description = "A polished travel eSIM storefront that lets people browse live destination plans, compare data and duration, and purchase an eSIM through the connected eSIM Access account."
+version = "1.0.0"
+id = "artifacts/esim-store"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22995
+
+[services.development]
+run = "pnpm --filter @workspace/esim-store run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/esim-store", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/esim-store/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22995"
+BASE_PATH = "/"
