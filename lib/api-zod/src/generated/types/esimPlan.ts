@@ -10,8 +10,7 @@ export interface EsimPlan {
   packageCode: string;
   name: string;
   location: string;
-  priceUsd: number;
-  retailPriceUsd: number;
+  pricePhp: number;
   volumeBytes: number;
   dataGb: number;
   duration: number;

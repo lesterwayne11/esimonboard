@@ -1,2 +1,3 @@
 - [eSIM provisioning responses](esim-provisioning-responses.md) — order queries may return temporary provider errors while provisioning is still in progress.
 - [OpenAPI integer compatibility](orval-zod-compat.md) — generated Zod output currently requires numeric quantities to remain `number` schemas.
+- [Store build environment](store-build-environment.md) — standalone storefront builds need both PORT and BASE_PATH; managed workflows provide them automatically.

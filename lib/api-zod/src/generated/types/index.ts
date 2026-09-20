@@ -8,9 +8,14 @@
 
 export * from './errorResponse';
 export * from './esimBalance';
+export * from './esimLookup';
 export * from './esimOrder';
 export * from './esimOrderInput';
 export * from './esimPlan';
 export * from './esimPlansResponse';
+export * from './esimTopup';
+export * from './esimTopupInput';
+export * from './getEsimLookupParams';
 export * from './getEsimPlansParams';
+export * from './getEsimTopupsParams';
 export * from './healthStatus';

@@ -5,9 +5,15 @@ import {
   GetEsimBalanceResponse,
   GetEsimPlansResponse,
   CreateEsimOrderResponse,
+  CreateEsimTopupBody,
+  CreateEsimTopupResponse,
+  GetEsimLookupQueryParams,
+  GetEsimLookupResponse,
   GetEsimOrderParams,
   GetEsimOrderResponse,
   GetEsimPlansQueryParams,
+  GetEsimTopupsQueryParams,
+  GetEsimTopupsResponse,
 } from "@workspace/api-zod";
 import {
   EsimAccessError,
@@ -17,6 +23,7 @@ import {
   callEsimAccessAllowingFailure,
   formatOrder,
   formatPlan,
+  formatLookup,
   type EsimDetails,
   type EsimPackage,
 } from "../lib/esim-access";
@@ -77,6 +84,32 @@ async function fetchOrderDetails(orderNo: string): Promise<EsimDetails | null> {
     }
     throw new EsimAccessError(
       result.errorMsg || "Unable to load that eSIM order",
+      result.errorCode ?? null,
+    );
+  }
+
+  return result.obj.esimList[0] ?? null;
+}
+
+async function fetchIccidDetails(iccid: string): Promise<EsimDetails | null> {
+  const result = await callEsimAccessAllowingFailure<{
+    esimList?: EsimDetails[];
+  }>("/esim/query", {
+    orderNo: "",
+    iccid,
+    pager: { pageNum: 1, pageSize: 20 },
+  });
+
+  if (!result.success || !result.obj?.esimList?.length) {
+    if (
+      result.errorCode === "200002" ||
+      result.errorCode === "200010" ||
+      result.errorCode === "000105"
+    ) {
+      return null;
+    }
+    throw new EsimAccessError(
+      result.errorMsg || "Unable to find that eSIM",
       result.errorCode ?? null,
     );
   }
@@ -148,6 +181,57 @@ router.get("/esim/balance", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/esim/lookup", async (req, res): Promise<void> => {
+  const parsed = GetEsimLookupQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Enter a valid ICCID" });
+    return;
+  }
+
+  try {
+    const details = await fetchIccidDetails(parsed.data.iccid);
+    if (!details) {
+      res.status(404).json({ error: "We could not find an eSIM with that ICCID" });
+      return;
+    }
+    const packageCode = asString(details.packageList?.[0]?.packageCode);
+    const plan = packageCode ? await findPlan(packageCode) : null;
+    if (!plan) {
+      res.status(502).json({ error: "The eSIM plan could not be loaded" });
+      return;
+    }
+    res.json(GetEsimLookupResponse.parse(formatLookup(details, plan)));
+  } catch (error) {
+    req.log.error({ err: error }, "Unable to look up eSIM");
+    res.status(502).json({ error: providerError(error) });
+  }
+});
+
+router.get("/esim/topups", async (req, res): Promise<void> => {
+  const parsed = GetEsimTopupsQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Enter a valid ICCID" });
+    return;
+  }
+
+  try {
+    const packages = await fetchPackages({ iccid: parsed.data.iccid });
+    const plans = packages
+      .map(formatPlan)
+      .filter((plan) => plan.packageCode.length > 0 && plan.supportTopUp);
+    res.json(
+      GetEsimTopupsResponse.parse({
+        plans,
+        regions: [],
+        total: plans.length,
+      }),
+    );
+  } catch (error) {
+    req.log.error({ err: error }, "Unable to load compatible eSIM top-ups");
+    res.status(502).json({ error: providerError(error) });
+  }
+});
+
 router.post("/esim/orders", async (req, res): Promise<void> => {
   const parsed = CreateEsimOrderBody.safeParse(req.body);
   if (!parsed.success) {
@@ -191,6 +275,60 @@ router.post("/esim/orders", async (req, res): Promise<void> => {
     res.status(201).json(response);
   } catch (error) {
     req.log.error({ err: error }, "Unable to create eSIM order");
+    res.status(providerStatus(error)).json({ error: providerError(error) });
+  }
+});
+
+router.post("/esim/topups", async (req, res): Promise<void> => {
+  const parsed = CreateEsimTopupBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Enter a valid ICCID and top-up package" });
+    return;
+  }
+
+  try {
+    const details = await fetchIccidDetails(parsed.data.iccid);
+    if (!details) {
+      res.status(404).json({ error: "We could not find an eSIM with that ICCID" });
+      return;
+    }
+    const compatiblePackages = await fetchPackages({ iccid: parsed.data.iccid });
+    const packageRecord = compatiblePackages.find(
+      (candidate) =>
+        asString(candidate.packageCode) === parsed.data.packageCode &&
+        asNumber(candidate.supportTopUpType) === 2,
+    );
+    if (!packageRecord) {
+      res.status(400).json({ error: "That top-up package is not compatible with this eSIM" });
+      return;
+    }
+    const esimTranNo = asString(details.esimTranNo);
+    if (!esimTranNo) {
+      res.status(400).json({ error: "This eSIM is not ready for a top-up yet" });
+      return;
+    }
+
+    const transactionId = `onboard_topup_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    await callEsimAccess("/esim/topup", {
+      esimTranNo,
+      iccid: "",
+      packageCode: parsed.data.packageCode,
+      transactionId,
+    });
+    const plan = formatPlan(packageRecord);
+    res.status(201).json(
+      CreateEsimTopupResponse.parse({
+        transactionId,
+        iccid: parsed.data.iccid,
+        packageCode: plan.packageCode,
+        packageName: plan.name,
+        pricePhp: plan.pricePhp,
+        status: "PROCESSING",
+        message: "The carrier accepted the top-up. Refresh the eSIM shortly to confirm it.",
+      }),
+    );
+  } catch (error) {
+    req.log.error({ err: error }, "Unable to top up eSIM");
     res.status(providerStatus(error)).json({ error: providerError(error) });
   }
 });

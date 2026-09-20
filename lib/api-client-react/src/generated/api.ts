@@ -22,10 +22,15 @@ import type {
 import type {
   ErrorResponse,
   EsimBalance,
+  EsimLookup,
   EsimOrder,
   EsimOrderInput,
   EsimPlansResponse,
+  EsimTopup,
+  EsimTopupInput,
+  GetEsimLookupParams,
   GetEsimPlansParams,
+  GetEsimTopupsParams,
   HealthStatus
 } from './api.schemas';
 
@@ -295,6 +300,246 @@ export function useGetEsimBalance<TData = Awaited<ReturnType<typeof getEsimBalan
 
 
 
+
+export const getGetEsimLookupUrl = (params: GetEsimLookupParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/esim/lookup?${stringifiedParams}` : `/api/esim/lookup`
+}
+
+/**
+ * Returns only supplier information supported by the eSIM Access response.
+ * @summary Look up an eSIM by ICCID
+ */
+export const getEsimLookup = async (params: GetEsimLookupParams, options?: Parameters<typeof customFetch>[1]): Promise<EsimLookup> => {
+
+  return customFetch<EsimLookup>(getGetEsimLookupUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEsimLookupQueryKey = (params?: GetEsimLookupParams,) => {
+    return [
+    `/api/esim/lookup`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEsimLookupQueryOptions = <TData = Awaited<ReturnType<typeof getEsimLookup>>, TError = ErrorType<ErrorResponse>>(params: GetEsimLookupParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEsimLookup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEsimLookupQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEsimLookup>>> = ({ signal }) => getEsimLookup(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEsimLookup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEsimLookupQueryResult = NonNullable<Awaited<ReturnType<typeof getEsimLookup>>>
+export type GetEsimLookupQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Look up an eSIM by ICCID
+ */
+
+export function useGetEsimLookup<TData = Awaited<ReturnType<typeof getEsimLookup>>, TError = ErrorType<ErrorResponse>>(
+ params: GetEsimLookupParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEsimLookup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEsimLookupQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEsimTopupsUrl = (params: GetEsimTopupsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/esim/topups?${stringifiedParams}` : `/api/esim/topups`
+}
+
+/**
+ * @summary List compatible top-up packages
+ */
+export const getEsimTopups = async (params: GetEsimTopupsParams, options?: Parameters<typeof customFetch>[1]): Promise<EsimPlansResponse> => {
+
+  return customFetch<EsimPlansResponse>(getGetEsimTopupsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEsimTopupsQueryKey = (params?: GetEsimTopupsParams,) => {
+    return [
+    `/api/esim/topups`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEsimTopupsQueryOptions = <TData = Awaited<ReturnType<typeof getEsimTopups>>, TError = ErrorType<ErrorResponse>>(params: GetEsimTopupsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEsimTopups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEsimTopupsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEsimTopups>>> = ({ signal }) => getEsimTopups(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEsimTopups>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEsimTopupsQueryResult = NonNullable<Awaited<ReturnType<typeof getEsimTopups>>>
+export type GetEsimTopupsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List compatible top-up packages
+ */
+
+export function useGetEsimTopups<TData = Awaited<ReturnType<typeof getEsimTopups>>, TError = ErrorType<ErrorResponse>>(
+ params: GetEsimTopupsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEsimTopups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEsimTopupsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateEsimTopupUrl = () => {
+
+
+
+
+  return `/api/esim/topups`
+}
+
+/**
+ * @summary Submit a top-up to eSIM Access
+ */
+export const createEsimTopup = async (esimTopupInput: EsimTopupInput, options?: Parameters<typeof customFetch>[1]): Promise<EsimTopup> => {
+
+  return customFetch<EsimTopup>(getCreateEsimTopupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(esimTopupInput)
+  }
+);}
+
+
+
+
+
+export const getCreateEsimTopupMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEsimTopup>>, TError,{data: BodyType<EsimTopupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEsimTopup>>, TError,{data: BodyType<EsimTopupInput>}, TContext> => {
+
+const mutationKey = ['createEsimTopup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEsimTopup>>, {data: BodyType<EsimTopupInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createEsimTopup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEsimTopupMutationResult = NonNullable<Awaited<ReturnType<typeof createEsimTopup>>>
+    export type CreateEsimTopupMutationBody = BodyType<EsimTopupInput>
+    export type CreateEsimTopupMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit a top-up to eSIM Access
+ */
+export const useCreateEsimTopup = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEsimTopup>>, TError,{data: BodyType<EsimTopupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEsimTopup>>,
+        TError,
+        {data: BodyType<EsimTopupInput>},
+        TContext
+      > => {
+      return useMutation(getCreateEsimTopupMutationOptions(options));
+    }
 
 export const getCreateEsimOrderUrl = () => {
 

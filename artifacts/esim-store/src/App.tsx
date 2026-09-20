@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import {
   ArrowRight,
   Check,
@@ -6,7 +7,10 @@ import {
   CircleAlert,
   Clipboard,
   CreditCard,
+  FileSearch,
   Globe2,
+  HelpCircle,
+  Home,
   LoaderCircle,
   MapPin,
   Minus,
@@ -14,53 +18,47 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings2,
   ShieldCheck,
   Smartphone,
   Sparkles,
+  UserRound,
   Wifi,
   X,
 } from 'lucide-react';
 import {
-  getGetEsimBalanceQueryKey,
+  getGetEsimLookupQueryKey,
   getGetEsimOrderQueryKey,
   getGetEsimPlansQueryKey,
+  getGetEsimTopupsQueryKey,
+  type EsimOrder,
   type EsimPlan,
+  useCreateEsimTopup,
   useCreateEsimOrder,
-  useGetEsimBalance,
+  useGetEsimLookup,
   useGetEsimOrder,
   useGetEsimPlans,
+  useGetEsimTopups,
 } from '@workspace/api-client-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Link, Route, Router as WouterRouter, Switch, useLocation, useParams } from 'wouter';
-import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
+const ORDER_STORAGE_KEY = 'esim-onboard-last-orders';
+const WELCOME_STORAGE_KEY = 'esim-onboard-welcome-seen';
 
-function Brand() {
-  return (
-    <Link href="/" className="brand-mark" data-testid="link-brand-home">
-      <span className="brand-symbol"><Wifi size={18} strokeWidth={2.5} /></span>
-      <span className="brand-word">roam<em>ly</em></span>
-    </Link>
-  );
+function formatPhp(valuePhp: number | null | undefined) {
+  if (valuePhp === null || valuePhp === undefined || Number.isNaN(valuePhp)) return '—';
+  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(valuePhp);
 }
 
-function Header({ balance, loading }: { balance?: number; loading: boolean }) {
-  return (
-    <header className="site-header">
-      <Brand />
-      <div className="header-actions">
-        <div className="balance-pill" data-testid="display-account-balance">
-          <span className="balance-label">Account credit</span>
-          {loading ? <span className="skeleton" style={{ height: 13, width: 50, borderRadius: 5 }} /> : <span className="balance-value">{balance === undefined ? '—' : `$${balance.toFixed(2)}`}</span>}
-        </div>
-        <span className="avatar" data-testid="display-account-avatar">R</span>
-      </div>
-    </header>
-  );
+function formatBytes(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+  return `${(value / 1024 ** 2).toFixed(0)} MB`;
 }
 
 function formatDuration(duration: number, unit: string) {
@@ -68,35 +66,126 @@ function formatDuration(duration: number, unit: string) {
   return `${duration} ${duration === 1 ? normalized.replace(/s$/, '') : normalized}`;
 }
 
-function formatData(plan: EsimPlan) {
-  if (plan.dataGb) return `${plan.dataGb} GB`;
-  return `${(plan.volumeBytes / 1073741824).toFixed(1)} GB`;
+function formatData(plan: Pick<EsimPlan, 'dataGb' | 'volumeBytes'> | Pick<EsimOrder, 'dataGb' | 'totalVolumeBytes'>) {
+  if ('dataGb' in plan && plan.dataGb) return `${plan.dataGb} GB`;
+  const bytes = 'volumeBytes' in plan ? plan.volumeBytes : plan.totalVolumeBytes;
+  return bytes ? `${(bytes / 1073741824).toFixed(1)} GB` : 'Pending';
+}
+
+function readSavedOrders(): EsimOrder[] {
+  try {
+    const saved = window.localStorage.getItem(ORDER_STORAGE_KEY);
+    return saved ? JSON.parse(saved) as EsimOrder[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberOrder(order: EsimOrder) {
+  const next = [order, ...readSavedOrders().filter((item) => item.orderNo !== order.orderNo)].slice(0, 8);
+  window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(next));
+}
+
+function Brand() {
+  return (
+    <Link href="/" className="brand-mark" data-testid="link-brand-home">
+      <span className="brand-symbol"><Wifi size={17} strokeWidth={2.7} /></span>
+      <span className="brand-word">ESIM <em>ONBOARD</em></span>
+    </Link>
+  );
+}
+
+function Header() {
+  return (
+    <header className="site-header">
+      <Brand />
+      <div className="header-actions">
+        <span className="header-mode">Demo mode</span>
+        <span className="avatar" data-testid="display-account-avatar">E</span>
+      </div>
+    </header>
+  );
+}
+
+const navItems = [
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/esims', label: 'My eSIMs', icon: Smartphone },
+  { href: '/orders', label: 'Orders', icon: FileSearch },
+  { href: '/account', label: 'Account', icon: UserRound },
+];
+
+function BottomNav() {
+  const [location] = useLocation();
+  return (
+    <nav className="nav-dock" aria-label="Primary navigation">
+      {navItems.map(({ href, label, icon: Icon }) => {
+        const active = href === '/' ? location === '/' : location.startsWith(href);
+        return <Link key={href} href={href} className={`nav-item ${active ? 'active' : ''}`} data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}><Icon /><span>{label}</span></Link>;
+      })}
+    </nav>
+  );
+}
+
+function AppLayout({ children }: { children: ReactNode }) {
+  return <div className="app-shell"><Header />{children}<BottomNav /></div>;
+}
+
+function WelcomeStrip() {
+  const [visible, setVisible] = useState(() => {
+    try { return window.localStorage.getItem(WELCOME_STORAGE_KEY) !== 'true'; } catch { return true; }
+  });
+  if (!visible) return null;
+  const dismiss = () => {
+    setVisible(false);
+    window.localStorage.setItem(WELCOME_STORAGE_KEY, 'true');
+  };
+  return (
+    <section className="welcome-strip" aria-label="Welcome to ESIM ONBOARD">
+      <div><ShieldCheck size={18} /><div><strong>Welcome aboard.</strong><span>Browse live plans now, or check an existing eSIM as a guest.</span></div></div>
+      <div className="welcome-actions"><Link href="/guest" className="button-quiet">Guest lookup</Link><button onClick={dismiss} aria-label="Dismiss welcome message">Dismiss</button></div>
+    </section>
+  );
+}
+
+function Dashboard({ lastOrder }: { lastOrder?: EsimOrder }) {
+  return (
+    <div className="dashboard-row">
+      <section className="dashboard-card" data-testid="dashboard-card">
+        <div className="card-label">At a glance</div>
+        <h2>{lastOrder ? `${formatData(lastOrder)} ready` : 'Your eSIM, at a glance'}</h2>
+        <p>{lastOrder ? `${lastOrder.packageName} · ${lastOrder.iccid ? 'Installed profile found' : 'Installation details pending'}` : 'Your active plan, balance, and QR code will live here.'}</p>
+        <Link href={lastOrder ? `/order/${lastOrder.orderNo}` : '/esims'} className="dashboard-link">{lastOrder ? 'Open install details' : 'View my eSIMs'} <ArrowRight size={13} /></Link>
+      </section>
+      <section className="quick-actions">
+        <h3>Quick access</h3>
+        <Link href="/guest" className="quick-action"><FileSearch size={15} /> Look up with ICCID <ArrowRight size={13} /></Link>
+        <Link href="/esims" className="quick-action"><Plus size={15} /> Add data or view plans <ArrowRight size={13} /></Link>
+        <div className="conversion-note">Customer prices are shown in PHP. Payment is simulated until a provider is connected.</div>
+      </section>
+    </div>
+  );
 }
 
 function PlanCard({ plan, index, selected, onCompare, onBuy }: {
   plan: EsimPlan; index: number; selected: boolean; onCompare: () => void; onBuy: () => void;
 }) {
+  const data = formatData(plan).split(' ');
   return (
     <article className="plan-card" style={{ animationDelay: `${index * 0.06}s` }} data-testid={`card-plan-${plan.packageCode}`}>
       <div className="plan-top">
-        <div>
-          <div className="plan-location" data-testid={`text-plan-location-${plan.packageCode}`}>{plan.location}</div>
-          <h3 className="plan-name" data-testid={`text-plan-name-${plan.packageCode}`}>{plan.name}</h3>
-        </div>
-        <button className={`plan-radio ${selected ? 'selected' : ''}`} onClick={onCompare} aria-label={`${selected ? 'Remove' : 'Add'} ${plan.name} from comparison`} data-testid={`button-compare-${plan.packageCode}`}>
-          {selected ? <Check size={14} /> : <Plus size={15} />}
-        </button>
+        <div><div className="plan-location">{plan.location}</div><h3 className="plan-name">{plan.name}</h3></div>
+        <button className={`plan-radio ${selected ? 'selected' : ''}`} onClick={onCompare} aria-label={`${selected ? 'Remove' : 'Add'} ${plan.name} from comparison`}><>{selected ? <Check size={13} /> : <Plus size={14} />}</></button>
       </div>
-      <div className="plan-data"><strong data-testid={`text-plan-data-${plan.packageCode}`}>{formatData(plan).split(' ')[0]}</strong><span>{formatData(plan).split(' ')[1]}</span></div>
+      <div className="plan-data"><strong>{data[0]}</strong><span>{data[1]}</span></div>
       <div className="plan-meta">
         <div className="meta-cell"><small>Valid for</small><b>{formatDuration(plan.duration, plan.durationUnit)}</b></div>
         <div className="meta-cell"><small>Network</small><b>{plan.speed}</b></div>
         <div className="meta-cell"><small>Activation</small><b>{plan.activeType === 1 ? 'On install' : 'On first use'}</b></div>
-        <div className="meta-cell"><small>Top up</small><b>{plan.supportTopUp ? 'Available' : 'Not available'}</b></div>
+        <div className="meta-cell"><small>Top up</small><b>{plan.supportTopUp ? 'Available' : 'Unavailable'}</b></div>
       </div>
       <div className="plan-bottom">
-        <div className="price" data-testid={`text-plan-price-${plan.packageCode}`}>${plan.priceUsd.toFixed(2)} {plan.retailPriceUsd > plan.priceUsd && <small>${plan.retailPriceUsd.toFixed(2)}</small>}</div>
-        <button className="buy-link" onClick={onBuy} data-testid={`button-buy-${plan.packageCode}`}>Choose plan <ArrowRight size={14} /></button>
+        <div className="price">{formatPhp(plan.pricePhp)}</div>
+        <button className="buy-link" onClick={onBuy}>Choose plan <ArrowRight size={13} /></button>
       </div>
     </article>
   );
@@ -109,126 +198,188 @@ function PurchaseModal({ plan, onClose }: { plan: EsimPlan; onClose: () => void 
   const [demoProcessing, setDemoProcessing] = useState(false);
   const submit = () => {
     setDemoProcessing(true);
-    window.setTimeout(() => {
-      order.mutate({ data: { packageCode: plan.packageCode, count: 1 } }, {
-        onSuccess: (result) => navigate(`/order/${result.orderNo}`),
-        onError: () => setDemoProcessing(false),
-      });
-    }, 850);
+    window.setTimeout(() => order.mutate({ data: { packageCode: plan.packageCode, count: 1 } }, {
+      onSuccess: (result) => { rememberOrder(result); navigate(`/order/${result.orderNo}`); },
+      onError: () => setDemoProcessing(false),
+    }), 650);
   };
   return (
     <div className="modal-scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="purchase-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-title" data-testid="dialog-purchase">
-        <div className="modal-header">
-          <div><div className="section-kicker">Ready when you are</div><h2 id="purchase-title">Add data for your trip</h2></div>
-          <button className="modal-close" onClick={onClose} aria-label="Close purchase dialog" data-testid="button-close-purchase"><X size={16} /></button>
-        </div>
+        <div className="modal-header"><div><div className="section-kicker">Plan review</div><h2 id="purchase-title">Add data for your route</h2></div><button className="modal-close" onClick={onClose} aria-label="Close purchase dialog"><X size={15} /></button></div>
         <div className="purchase-summary">
           <div><span>Destination</span><strong>{plan.location}</strong></div>
           <div><span>Plan</span><strong>{plan.name}</strong></div>
-          <div><span>Data & validity</span><strong>{formatData(plan)} · {formatDuration(plan.duration, plan.durationUnit)}</strong></div>
-          <div className="purchase-total"><span>Total today</span><strong>${plan.priceUsd.toFixed(2)}</strong></div>
+          <div><span>Data and validity</span><strong>{formatData(plan)} · {formatDuration(plan.duration, plan.durationUnit)}</strong></div>
+          <div className="purchase-total"><span>Total today</span><strong>{formatPhp(plan.pricePhp)}</strong></div>
         </div>
-        <div className="demo-payment-banner" data-testid="banner-demo-payment">
-          <ShieldCheck size={17} />
-          <div><strong>Demo checkout mode</strong><span>No customer payment is collected yet. This simulates checkout and uses account credit to provision the eSIM.</span></div>
-        </div>
-        {step === 'review' ? (
-          <p className="modal-note">Review your plan first. The next step is a simulated payment screen for testing the complete customer journey.</p>
-        ) : (
-          <div className="demo-payment-panel" data-testid="panel-demo-payment">
-            <div className="demo-payment-heading"><CreditCard size={18} /><div><strong>Test payment</strong><span>Nothing will be charged</span></div></div>
-            <div className="fake-payment-field"><span>Payment method</span><b>Demo card ···· 4242</b></div>
-            <div className="fake-payment-field"><span>Billing total</span><b>${plan.priceUsd.toFixed(2)} USD</b></div>
-            <p className="modal-note">When real payments are added, this step will be replaced by a secure payment checkout.</p>
-          </div>
-        )}
-        {order.isError && <div className="modal-error" data-testid="status-purchase-error">We could not place this order. Check your account credit and try again.</div>}
-        <div className="modal-actions">
-          <button className="button-quiet" onClick={step === 'payment' && !demoProcessing ? () => setStep('review') : onClose} data-testid="button-cancel-purchase">{step === 'payment' ? 'Back' : 'Not yet'}</button>
-          <button className="button-primary" onClick={step === 'review' ? () => setStep('payment') : submit} disabled={demoProcessing || order.isPending} data-testid="button-confirm-purchase">
-            {demoProcessing || order.isPending ? <><LoaderCircle size={16} className="spin" /> Provisioning</> : step === 'review' ? <>Continue to demo payment <ArrowRight size={15} /></> : <>Simulate payment & provision <ArrowRight size={15} /></>}
-          </button>
-        </div>
+        <div className="demo-payment-banner" data-testid="banner-demo-payment"><ShieldCheck size={16} /><div><strong>Demo checkout only</strong><span>No customer payment is collected. This flow submits a live provisioning order after the test step.</span></div></div>
+        {step === 'review' ? <p className="modal-note">Review the carrier plan first. The next screen is a clearly marked test payment step; nothing will be charged.</p> : <div className="demo-payment-panel">
+          <div className="demo-payment-heading"><CreditCard size={17} /><div><strong>Test payment method</strong><span>Nothing will be charged</span></div></div>
+          <div className="fake-payment-field"><span>Payment method</span><b>Demo card ···· 4242</b></div>
+          <div className="fake-payment-field"><span>Billing total</span><b>{formatPhp(plan.pricePhp)}</b></div>
+          <p className="conversion-note">This PHP price comes from the app pricing configuration. It is not a receipt or charge.</p>
+        </div>}
+        {order.isError && <div className="modal-error">We could not place this provisioning order. Please try again.</div>}
+        <div className="modal-actions"><button className="button-quiet" onClick={step === 'payment' && !demoProcessing ? () => setStep('review') : onClose}>{step === 'payment' ? 'Back' : 'Not yet'}</button><button className="button-primary" onClick={step === 'review' ? () => setStep('payment') : submit} disabled={demoProcessing || order.isPending}>{demoProcessing || order.isPending ? <><LoaderCircle size={15} /> Provisioning</> : step === 'review' ? <>Review demo payment <ArrowRight size={14} /></> : <>Simulate payment and provision <ArrowRight size={14} /></>}</button></div>
       </section>
     </div>
   );
 }
 
 function ComparePanel({ plans, onClose, onRemove }: { plans: EsimPlan[]; onClose: () => void; onRemove: (code: string) => void }) {
-  return (
-    <section className="compare-panel" data-testid="panel-plan-comparison">
-      <div className="compare-heading"><div><div className="eyebrow">Side by side</div><h3>Find your best fit</h3></div><button className="compare-close" onClick={onClose} aria-label="Close comparison" data-testid="button-close-comparison"><X size={18} /></button></div>
-      <table className="compare-table">
-        <thead><tr><th>Plan</th>{plans.map((plan) => <th key={plan.packageCode}>{plan.location}<button onClick={() => onRemove(plan.packageCode)} aria-label={`Remove ${plan.name}`} data-testid={`button-remove-compare-${plan.packageCode}`}><Minus size={12} /></button></th>)}</tr></thead>
-        <tbody>
-          <tr><td>Data</td>{plans.map((plan) => <td key={plan.packageCode}>{formatData(plan)}</td>)}</tr>
-          <tr><td>Validity</td>{plans.map((plan) => <td key={plan.packageCode}>{formatDuration(plan.duration, plan.durationUnit)}</td>)}</tr>
-          <tr><td>Speed</td>{plans.map((plan) => <td key={plan.packageCode}>{plan.speed}</td>)}</tr>
-          <tr><td>Price</td>{plans.map((plan) => <td key={plan.packageCode}>${plan.priceUsd.toFixed(2)}</td>)}</tr>
-        </tbody>
-      </table>
-    </section>
-  );
+  return <section className="compare-panel"><div className="compare-heading"><div><div className="eyebrow">Side by side</div><h3>Find your best fit</h3></div><button className="compare-close" onClick={onClose} aria-label="Close comparison"><X size={17} /></button></div><table className="compare-table"><thead><tr><th>Plan</th>{plans.map((plan) => <th key={plan.packageCode}>{plan.location}<button onClick={() => onRemove(plan.packageCode)} aria-label={`Remove ${plan.name}`}><Minus size={11} /></button></th>)}</tr></thead><tbody><tr><td>Data</td>{plans.map((plan) => <td key={plan.packageCode}>{formatData(plan)}</td>)}</tr><tr><td>Validity</td>{plans.map((plan) => <td key={plan.packageCode}>{formatDuration(plan.duration, plan.durationUnit)}</td>)}</tr><tr><td>Speed</td>{plans.map((plan) => <td key={plan.packageCode}>{plan.speed}</td>)}</tr><tr><td>Price</td>{plans.map((plan) => <td key={plan.packageCode}>{formatPhp(plan.pricePhp)}</td>)}</tr></tbody></table></section>;
 }
 
 function Catalog() {
   const plansQuery = useGetEsimPlans(undefined, { query: { queryKey: getGetEsimPlansQueryKey() } });
-  const balanceQuery = useGetEsimBalance({ query: { queryKey: getGetEsimBalanceQueryKey() } });
   const [search, setSearch] = useState('');
   const [region, setRegion] = useState('All destinations');
   const [compareCodes, setCompareCodes] = useState<string[]>([]);
   const [purchasePlan, setPurchasePlan] = useState<EsimPlan | null>(null);
+  const [savedOrders] = useState<EsimOrder[]>(readSavedOrders);
   const plans = plansQuery.data?.plans ?? [];
   const regions = plansQuery.data?.regions ?? [];
   const filteredPlans = useMemo(() => plans.filter((plan) => {
     const matchesRegion = region === 'All destinations' || plan.location === region;
-    const haystack = `${plan.name} ${plan.location} ${plan.packageCode}`.toLowerCase();
-    return matchesRegion && haystack.includes(search.toLowerCase().trim());
+    return matchesRegion && `${plan.name} ${plan.location} ${plan.packageCode}`.toLowerCase().includes(search.toLowerCase().trim());
   }), [plans, region, search]);
   const comparePlans = compareCodes.map((code) => plans.find((plan) => plan.packageCode === code)).filter((plan): plan is EsimPlan => Boolean(plan));
   const toggleCompare = (code: string) => setCompareCodes((current) => current.includes(code) ? current.filter((item) => item !== code) : current.length < 3 ? [...current, code] : current);
-
   return (
-    <div className="app-shell">
-      <Header balance={balanceQuery.data?.balanceUsd} loading={balanceQuery.isLoading} />
+    <AppLayout>
       <main className="main-frame">
-        <section className="hero">
-          <div className="hero-copy">
-            <div className="eyebrow">Travel data, sorted</div>
-            <h1>Go further.<br /><span>Stay connected.</span></h1>
-            <p className="hero-subtitle">Simple eSIM plans for the places you are going. Pick your destination, land connected, and leave roaming surprises behind.</p>
-          </div>
-          <div className="route-line" aria-hidden="true"><span className="route-dot" /><i /><Globe2 size={17} /><i /><span className="route-dot" /></div>
-        </section>
-        <section className="content-intro">
-          <div><div className="section-kicker">Live plan catalog</div><h2>Where are you headed?</h2></div>
-          <span className="result-note" data-testid="text-plan-count">{plansQuery.data ? `${filteredPlans.length} of ${plansQuery.data.total} plans` : 'Loading live plans'}</span>
-        </section>
-        <div className="filters">
-          <label className="search-box"><Search size={16} className="filter-icon" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a country or region" aria-label="Search plans" data-testid="input-search-plans" /></label>
-          <label className="select-box"><MapPin size={15} className="filter-icon" /><select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Filter by destination" data-testid="select-region"><option>All destinations</option>{regions.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={15} className="filter-icon" /></label>
-          <button className="compare-button" onClick={() => setCompareCodes(compareCodes.length ? compareCodes : filteredPlans.slice(0, 2).map((plan) => plan.packageCode))} disabled={!plans.length} data-testid="button-open-comparison"><Sparkles size={15} /> Compare {compareCodes.length > 0 && `(${compareCodes.length})`}</button>
-        </div>
-        {plansQuery.isLoading && <div className="plans-loading" data-testid="state-plans-loading">{[1, 2, 3].map((item) => <div className="skeleton" key={item} />)}</div>}
-        {plansQuery.isError && <div className="error-state" data-testid="state-plans-error"><span className="state-icon"><CircleAlert size={22} /></span><h3>Plans took a wrong turn</h3><p>We could not reach the live catalog. Your account is safe — please try again.</p><button className="button-dark" onClick={() => plansQuery.refetch()} data-testid="button-retry-plans"><RefreshCw size={15} /> Try again</button></div>}
-        {!plansQuery.isLoading && !plansQuery.isError && !filteredPlans.length && <div className="empty-state" data-testid="state-plans-empty"><span className="state-icon"><PackageOpen size={22} /></span><h3>No plans match that search</h3><p>Try a broader destination or clear your search to see every live plan.</p><button className="button-dark" onClick={() => { setSearch(''); setRegion('All destinations'); }} data-testid="button-clear-filters">Clear filters</button></div>}
+        <section className="hero"><div className="hero-copy"><div className="eyebrow">Connectivity for the watch</div><h1>Stay online.<br /><span>Stay on course.</span></h1><p className="hero-subtitle">Fast, clear eSIM plans for seafarers. See what is left, know when it expires, and keep your next port within reach.</p></div><div className="hero-signal" aria-hidden="true"><b /><i /><Globe2 size={16} /><i /><b /></div></section>
+        <WelcomeStrip />
+      <Dashboard lastOrder={savedOrders[0]} />
+        <section className="content-intro"><div><div className="section-kicker">Live carrier catalog</div><h2>Choose your next route</h2></div><span className="result-note">{plansQuery.data ? `${filteredPlans.length} of ${plansQuery.data.total} plans` : 'Loading live plans'}</span></section>
+        <div className="filters"><label className="search-box"><Search size={15} className="filter-icon" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a country or region" aria-label="Search plans" /></label><label className="select-box"><MapPin size={14} className="filter-icon" /><select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Filter by destination"><option>All destinations</option>{regions.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} className="filter-icon" /></label><button className="compare-button" onClick={() => setCompareCodes(compareCodes.length ? compareCodes : filteredPlans.slice(0, 2).map((plan) => plan.packageCode))} disabled={!plans.length}><Sparkles size={14} /> Compare {compareCodes.length > 0 && `(${compareCodes.length})`}</button></div>
+        {plansQuery.isLoading && <div className="plans-loading">{[1, 2, 3].map((item) => <div className="skeleton" key={item} />)}</div>}
+        {plansQuery.isError && <div className="error-state"><span className="state-icon"><CircleAlert size={21} /></span><h3>Plans took a wrong turn</h3><p>We could not reach the live catalog. Your account is safe; please try again.</p><button className="button-dark" onClick={() => plansQuery.refetch()}><RefreshCw size={14} /> Try again</button></div>}
+        {!plansQuery.isLoading && !plansQuery.isError && !filteredPlans.length && <div className="empty-state"><span className="state-icon"><PackageOpen size={21} /></span><h3>No plans match that search</h3><p>Try a broader destination or clear your search to see every live plan.</p><button className="button-dark" onClick={() => { setSearch(''); setRegion('All destinations'); }}>Clear filters</button></div>}
         {!plansQuery.isLoading && !plansQuery.isError && filteredPlans.length > 0 && <div className="plans-grid">{filteredPlans.map((plan, index) => <PlanCard key={plan.packageCode} plan={plan} index={index} selected={compareCodes.includes(plan.packageCode)} onCompare={() => toggleCompare(plan.packageCode)} onBuy={() => setPurchasePlan(plan)} />)}</div>}
-        {comparePlans.length >= 2 && <ComparePanel plans={comparePlans} onClose={() => setCompareCodes([])} onRemove={(code) => toggleCompare(code)} />}
+        {comparePlans.length >= 2 && <ComparePanel plans={comparePlans} onClose={() => setCompareCodes([])} onRemove={toggleCompare} />}
       </main>
       {purchasePlan && <PurchaseModal plan={purchasePlan} onClose={() => setPurchasePlan(null)} />}
-    </div>
+    </AppLayout>
   );
 }
 
 function CopyValue({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    await navigator.clipboard?.writeText(value);
+    try { await navigator.clipboard?.writeText(value); } catch { /* clipboard can be unavailable in demo preview */ }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };
-  return <button className="copy-button" onClick={copy} aria-label={`Copy ${label}`} data-testid={`button-copy-${label}`} title={copied ? 'Copied' : `Copy ${label}`}>{copied ? <Check size={13} /> : <Clipboard size={13} />}</button>;
+  return <button className="copy-button" onClick={copy} aria-label={`Copy ${label}`} title={copied ? 'Copied' : `Copy ${label}`}>{copied ? <Check size={12} /> : <Clipboard size={12} />}</button>;
+}
+
+function EsimsPage() {
+  const [orders, setOrders] = useState<EsimOrder[]>(readSavedOrders);
+  const latest = orders[0];
+  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Your connectivity</div><h1>My eSIMs</h1></div><Link href="/" className="button-primary"><Plus size={14} /> Add data</Link></section>
+    {latest ? <article className="surface-card" data-testid="active-esim-card"><div className="card-label">Most recent profile</div><h2 className="plan-name">{latest.packageName}</h2><div className="esim-meter pending"><span /></div><div className="esim-stat-row"><span>Allowance</span><strong>{formatData(latest)}</strong></div><div className="esim-stat-row"><span>ICCID</span><strong>{latest.iccid ? `${latest.iccid.slice(0, 6)}…${latest.iccid.slice(-4)}` : 'Provisioning'}</strong></div><div className="esim-stat-row"><span>Expires</span><strong>{latest.expiresAt ? new Date(latest.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Carrier pending'}</strong></div><div><Link className="topup-button" href={latest.iccid ? `/guest?iccid=${encodeURIComponent(latest.iccid)}` : '/guest'}><Plus size={13} /> Check top-up options</Link></div><Link href={`/order/${latest.orderNo}`} className="dashboard-link" style={{ position: 'static', marginTop: 16 }}>Open QR and install details <ArrowRight size={13} /></Link></article> : <div className="empty-state"><span className="state-icon"><Smartphone size={21} /></span><h3>No eSIMs saved yet</h3><p>Choose a live plan and your install details will appear here after provisioning.</p><Link href="/" className="button-dark">Browse live plans <ArrowRight size={14} /></Link></div>}
+    <article className="surface-card"><div className="card-label">Need to reconnect?</div><h2 className="plan-name">Look up a profile by ICCID</h2><p className="lookup-note">Use the carrier identifier from your phone settings to find an existing installation. We will never pretend a lookup succeeded when the carrier is unavailable.</p><Link href="/guest" className="button-quiet" style={{ marginTop: 15 }}>Open guest lookup <ArrowRight size={13} /></Link></article>
+  </main></AppLayout>;
+}
+
+function OrdersPage() {
+  const [orders] = useState<EsimOrder[]>(readSavedOrders);
+  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Local demo history</div><h1>Orders</h1></div><p>Last {orders.length} saved locally</p></section><article className="surface-card"><div className="card-label">Provisioning history</div>{orders.length ? <div className="order-list" style={{ marginTop: 17 }}>{orders.map((order) => <Link href={`/order/${order.orderNo}`} className="order-list-item" key={order.orderNo}><div><strong>{order.packageName}</strong><span>{order.orderNo} · {formatPhp(order.pricePhp)}</span></div><span className={`status-badge ${order.qrCodeUrl ? 'status-ready' : 'status-pending'}`}>{order.qrCodeUrl ? 'Ready' : 'Processing'}</span><ArrowRight size={14} /></Link>)}</div> : <div className="empty-inline"><PackageOpen size={17} /> No orders on this device yet.</div>}<p className="lookup-note">This history is demo-only local storage for this browser. It is not secure account persistence and is not shared across devices.</p></article></main></AppLayout>;
+}
+
+function AccountPage() {
+  const [supportMessage, setSupportMessage] = useState('');
+  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Crew settings</div><h1>Account</h1></div></section><article className="surface-card"><div className="card-label">ESIM ONBOARD demo session</div><h2 className="plan-name">Welcome, crew member</h2><p className="lookup-note">This preview has no sign-in or secure account persistence. Your last orders stay in this browser only so you can continue the demo journey.</p><div className="help-grid"><button className="help-tile" onClick={() => setSupportMessage('Support contact is not connected in this demo.')}><HelpCircle size={17} /><strong>Get help</strong><span>Installation and carrier guidance</span></button><button className="help-tile" onClick={() => setSupportMessage('Network status is available from each live order detail page.')}><Settings2 size={17} /><strong>Network status</strong><span>Check provisioning details</span></button></div>{supportMessage && <p className="lookup-note" role="status">{supportMessage}</p>}</article><article className="surface-card"><div className="card-label">Pricing note</div><h2 className="plan-name">Clear numbers, no surprises</h2><p className="lookup-note">Customer-facing prices are shown in Philippine pesos. Demo checkout never charges money.</p></article></main></AppLayout>;
+}
+
+function GuestPage() {
+  const [iccid, setIccid] = useState(() => new URLSearchParams(window.location.search).get('iccid') ?? '');
+  const [searchedIccid, setSearchedIccid] = useState(() => new URLSearchParams(window.location.search).get('iccid') ?? '');
+  const [topupStep, setTopupStep] = useState<'review' | 'payment'>('review');
+  const [selectedTopup, setSelectedTopup] = useState('');
+  const lookupIccid = searchedIccid || '0000000000';
+  const lookupQuery = useGetEsimLookup(
+    { iccid: lookupIccid },
+    {
+      query: {
+        enabled: searchedIccid.length >= 10,
+        queryKey: getGetEsimLookupQueryKey({ iccid: searchedIccid }),
+      },
+    },
+  );
+  const topupsQuery = useGetEsimTopups(
+    { iccid: lookupIccid },
+    {
+      query: {
+        enabled: Boolean(lookupQuery.data?.supportTopUp) && searchedIccid.length >= 10,
+        queryKey: getGetEsimTopupsQueryKey({ iccid: searchedIccid }),
+      },
+    },
+  );
+  const topupMutation = useCreateEsimTopup();
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const normalized = iccid.replace(/\D/g, '');
+    if (normalized.length < 10) return;
+    setSelectedTopup('');
+    setTopupStep('review');
+    setSearchedIccid(normalized);
+  };
+  const lookup = lookupQuery.data;
+  const selectedPlan = topupsQuery.data?.plans.find((plan) => plan.packageCode === selectedTopup);
+  const submitTopup = () => {
+    if (!selectedPlan) return;
+    topupMutation.mutate({
+      data: { iccid: searchedIccid, packageCode: selectedPlan.packageCode },
+    });
+  };
+
+  return (
+    <AppLayout>
+      <main className="page-frame">
+        <section className="page-heading">
+          <div><div className="section-kicker">No account required</div><h1>Guest lookup</h1></div>
+        </section>
+        <article className="surface-card">
+          <div className="card-label">Find an eSIM</div>
+          <h2 className="plan-name">Enter your ICCID</h2>
+          <p className="lookup-note">The ICCID is the long number shown in your phone’s cellular plan details. We only display information returned by the carrier.</p>
+          <form className="lookup-form" onSubmit={submit}>
+            <input value={iccid} onChange={(event) => setIccid(event.target.value)} inputMode="numeric" placeholder="Enter ICCID" aria-label="ICCID" />
+            <button className="button-primary" type="submit" disabled={iccid.replace(/\D/g, '').length < 10 || lookupQuery.isFetching}>
+              {lookupQuery.isFetching ? <><LoaderCircle size={14} /> Checking</> : 'Check ICCID'}
+            </button>
+          </form>
+        </article>
+        {lookupQuery.isError && <div className="error-state" style={{ marginTop: 14, padding: 25 }}><span className="state-icon"><CircleAlert size={19} /></span><h3>We could not find that eSIM</h3><p>Check the ICCID and try again. The carrier did not return a usable profile.</p><button className="button-dark" type="button" onClick={() => { setSearchedIccid(''); setIccid(''); }}>Try another ICCID</button></div>}
+        {lookup && <article className="surface-card lookup-result">
+          <div className="card-label">Carrier profile found</div>
+          <div className="lookup-result-heading"><div><h2 className="plan-name">{lookup.packageName}</h2><p className="lookup-note">{lookup.iccid}</p></div><span className="status-badge status-ready">{lookup.status}</span></div>
+          <div className="lookup-stats">
+            <div><span>Remaining data</span><strong>{formatBytes(lookup.remainingBytes)}</strong></div>
+            <div><span>Used data</span><strong>{formatBytes(lookup.usedBytes)}</strong></div>
+            <div><span>Allowance</span><strong>{formatBytes(lookup.totalVolumeBytes)}</strong></div>
+            <div><span>Expires</span><strong>{lookup.expiresAt ? new Date(lookup.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not available'}</strong></div>
+          </div>
+          {lookup.qrCodeUrl && <a className="install-link" href={lookup.qrCodeUrl} target="_blank" rel="noreferrer"><Smartphone size={14} /> Open carrier QR <ArrowRight size={13} /></a>}
+          {lookup.supportTopUp ? <div className="topup-panel">
+            <div className="card-label">Compatible top-ups</div>
+            {topupsQuery.isLoading && <p className="lookup-note">Checking compatible carrier packages…</p>}
+            {topupsQuery.isError && <p className="lookup-note">Compatible top-up packages could not be loaded.</p>}
+            {!topupsQuery.isLoading && !topupsQuery.isError && !topupsQuery.data?.plans.length && <p className="lookup-note">The carrier did not return a compatible top-up package.</p>}
+            {!!topupsQuery.data?.plans.length && <><select className="topup-select" value={selectedTopup} onChange={(event) => setSelectedTopup(event.target.value)} aria-label="Choose a compatible top-up"><option value="">Choose a compatible package</option>{topupsQuery.data.plans.map((plan) => <option key={plan.packageCode} value={plan.packageCode}>{formatData(plan)} · {formatDuration(plan.duration, plan.durationUnit)} · {formatPhp(plan.pricePhp)}</option>)}</select>{selectedPlan && <div className="topup-review">
+              <div className="fake-payment-field"><span>Top-up total</span><b>{formatPhp(selectedPlan.pricePhp)}</b></div>
+              <div className="demo-payment-banner"><ShieldCheck size={15} /><div><strong>Demo payment only</strong><span>No customer payment is collected. The final step submits a live carrier top-up.</span></div></div>
+              {topupMutation.isSuccess ? <div className="success-state"><Check size={17} /><span>{topupMutation.data.message}</span></div> : <div className="modal-actions"><button className="button-quiet" type="button" onClick={() => setTopupStep(topupStep === 'review' ? 'payment' : 'review')}>{topupStep === 'review' ? 'Review payment' : 'Back'}</button><button className="button-primary" type="button" onClick={submitTopup} disabled={topupStep === 'review' || topupMutation.isPending}>{topupMutation.isPending ? <><LoaderCircle size={14} /> Processing</> : 'Simulate payment and top up'}</button></div>}
+            </div>}</>}
+          </div> : <p className="lookup-note">This eSIM does not report top-up support from the carrier.</p>}
+        </article>}
+        <p className="lookup-note">For a newly purchased eSIM, use Orders to open live provisioning and QR installation details.</p>
+      </main>
+    </AppLayout>
+  );
 }
 
 function OrderPage() {
@@ -241,42 +392,12 @@ function OrderPage() {
   const failed = status.includes('FAIL') || status.includes('ERROR');
   const statusClass = failed ? 'status-error' : ready ? 'status-ready' : 'status-pending';
   const statusLabel = failed ? 'Needs attention' : ready ? 'Ready to install' : 'Provisioning';
-
-  return (
-    <div className="app-shell">
-      <header className="site-header"><Brand /><Link href="/" className="back-link" data-testid="link-back-catalog"><ArrowRight size={15} style={{ transform: 'rotate(180deg)' }} /> Browse plans</Link></header>
-      <main className="order-page">
-        <Link href="/" className="back-link" data-testid="link-order-back"><ArrowRight size={15} style={{ transform: 'rotate(180deg)' }} /> Back to catalog</Link>
-        {orderQuery.isLoading && <div className="page-skeleton" data-testid="state-order-loading" />}
-        {orderQuery.isError && <div className="error-state" style={{ marginTop: 50 }} data-testid="state-order-error"><span className="state-icon"><CircleAlert size={22} /></span><h3>We could not find that order</h3><p>The provisioning service did not return this order. Check the order number and try again.</p><button className="button-dark" onClick={() => orderQuery.refetch()} data-testid="button-retry-order"><RefreshCw size={15} /> Check again</button></div>}
-        {order && !orderQuery.isError && <><section className="order-hero"><div><div className="section-kicker">Order {order.orderNo}</div><h1>Your trip is<br />coming online.</h1><p>Keep this page handy while you install your new plan.</p></div><div className={`status-badge ${statusClass}`} data-testid="status-order"><span>●</span>{statusLabel}</div></section><section className="order-layout">
-          <article className="qr-card">
-            <div className="card-label">Install your eSIM</div><h2>Scan to connect</h2><p>On your phone, open your cellular settings and add an eSIM. Scan this code when prompted.</p>
-            <div className={`qr-frame ${order.qrCodeUrl ? '' : 'qr-pending'}`} data-testid="display-order-qr">{order.qrCodeUrl ? <img src={order.qrCodeUrl} alt="QR code to install your eSIM" /> : <><LoaderCircle size={25} /><span>{failed ? 'Provisioning needs a retry' : 'Your QR code is on its way'}</span></>}</div>
-            {order.shortUrl && <a className="install-link" href={order.shortUrl} target="_blank" rel="noreferrer" data-testid="link-install-esim"><Smartphone size={15} /> Open install link <ArrowRight size={14} /></a>}
-            {!order.qrCodeUrl && !order.shortUrl && <p className="order-footnote">This page checks for provisioning updates automatically. You can safely leave it open.</p>}
-          </article>
-          <article className="details-card">
-            <div className="card-label">Order details</div><h2>{order.packageName}</h2>
-            <dl className="details-list">
-              <div className="detail-row"><dt>Order number</dt><dd data-testid="text-order-number">{order.orderNo}<CopyValue value={order.orderNo} label="order-number" /></dd></div>
-              <div className="detail-row"><dt>Data allowance</dt><dd data-testid="text-order-data">{order.dataGb ? `${order.dataGb} GB` : order.totalVolumeBytes ? `${(order.totalVolumeBytes / 1073741824).toFixed(1)} GB` : 'Pending'}</dd></div>
-              <div className="detail-row"><dt>Validity</dt><dd data-testid="text-order-duration">{order.totalDuration && order.durationUnit ? formatDuration(order.totalDuration, order.durationUnit) : 'Pending'}</dd></div>
-              <div className="detail-row"><dt>ICCID</dt><dd data-testid="text-order-iccid">{order.iccid ?? 'Pending'}{order.iccid && <CopyValue value={order.iccid} label="ICCID" />}</dd></div>
-              <div className="detail-row"><dt>Transaction</dt><dd data-testid="text-transaction-id">{order.transactionId}</dd></div>
-              {order.expiresAt && <div className="detail-row"><dt>Expires</dt><dd data-testid="text-order-expiry">{new Date(order.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</dd></div>}
-            </dl>
-            <p className="order-footnote"><ShieldCheck size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} /> Your plan details are pulled directly from the carrier network.</p>
-          </article>
-        </section></>}
-      </main>
-    </div>
-  );
+  return <AppLayout><main className="order-page"><Link href="/orders" className="back-link"><ArrowRight size={14} style={{ transform: 'rotate(180deg)' }} /> Back to orders</Link>{orderQuery.isLoading && <div className="page-skeleton" />}{orderQuery.isError && <div className="error-state" style={{ marginTop: 45 }}><span className="state-icon"><CircleAlert size={21} /></span><h3>We could not find that order</h3><p>The provisioning service did not return this order. Check the order number and try again.</p><button className="button-dark" onClick={() => orderQuery.refetch()}><RefreshCw size={14} /> Check again</button></div>}{order && !orderQuery.isError && <><section className="order-hero"><div><div className="section-kicker">Order {order.orderNo}</div><h1>Your connection is<br />coming online.</h1><p>Keep this page handy while you install your new plan.</p></div><div className={`status-badge ${statusClass}`}><span>●</span>{statusLabel}</div></section><section className="order-layout"><article className="qr-card"><div className="card-label">Install your eSIM</div><h2>Scan to connect</h2><p>Open cellular settings, choose Add eSIM, then scan this code when prompted.</p><div className={`qr-frame ${order.qrCodeUrl ? '' : 'qr-pending'}`}>{order.qrCodeUrl ? <img src={order.qrCodeUrl} alt="QR code to install your eSIM" /> : <><LoaderCircle size={24} /><span>{failed ? 'Provisioning needs attention' : 'Your QR code is on its way'}</span></>}</div>{order.shortUrl && <a className="install-link" href={order.shortUrl} target="_blank" rel="noreferrer"><Smartphone size={14} /> Open install link <ArrowRight size={13} /></a>}{!order.qrCodeUrl && !order.shortUrl && <p className="order-footnote">This page checks for provisioning updates automatically. You can safely leave it open.</p>}</article><article className="details-card"><div className="card-label">Order details</div><h2>{order.packageName}</h2><dl className="details-list"><div className="detail-row"><dt>Order number</dt><dd>{order.orderNo}<CopyValue value={order.orderNo} label="order number" /></dd></div><div className="detail-row"><dt>Data allowance</dt><dd>{formatData(order)}</dd></div><div className="detail-row"><dt>Validity</dt><dd>{order.totalDuration && order.durationUnit ? formatDuration(order.totalDuration, order.durationUnit) : 'Pending'}</dd></div><div className="detail-row"><dt>ICCID</dt><dd>{order.iccid ?? 'Pending'}{order.iccid && <CopyValue value={order.iccid} label="ICCID" />}</dd></div><div className="detail-row"><dt>Transaction</dt><dd>{order.transactionId}</dd></div>{order.expiresAt && <div className="detail-row"><dt>Expires</dt><dd>{new Date(order.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</dd></div>}</dl><p className="order-footnote"><ShieldCheck size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} /> Details are pulled directly from the carrier network.</p></article></section></>}</main></AppLayout>;
 }
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Catalog} /><Route path="/order/:orderNo" component={OrderPage} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Catalog} /><Route path="/esims" component={EsimsPage} /><Route path="/orders" component={OrdersPage} /><Route path="/account" component={AccountPage} /><Route path="/guest" component={GuestPage} /><Route path="/order/:orderNo" component={OrderPage} /><Route component={() => <div className="page-frame"><div className="error-state"><span className="state-icon"><CircleAlert size={21} /></span><h3>That page is off the route</h3><p>Return home to browse connectivity plans.</p><Link href="/" className="button-dark">Go home</Link></div></div>} /></Switch></ErrorBoundary>;
 }
 
 function App() {

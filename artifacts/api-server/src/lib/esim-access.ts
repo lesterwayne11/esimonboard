@@ -1,6 +1,18 @@
 import crypto from "node:crypto";
 
 const BASE_URL = "https://api.esimaccess.com/api/v1/open";
+const DEFAULT_USD_TO_PHP = 58.4;
+
+function numericEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function customerPricePhp(priceUsd: number): number {
+  const exchangeRate = numericEnv("ESIM_USD_TO_PHP", DEFAULT_USD_TO_PHP);
+  const markupPhp = numericEnv("ESIM_GLOBAL_MARKUP_PHP", 0);
+  return Math.round((priceUsd * exchangeRate + markupPhp) * 100) / 100;
+}
 
 type ProviderResponse<T> = {
   success?: boolean;
@@ -33,6 +45,7 @@ export type EsimDetails = {
   smdpStatus?: unknown;
   esimStatus?: unknown;
   totalVolume?: unknown;
+  orderUsage?: unknown;
   totalDuration?: unknown;
   durationUnit?: unknown;
   expiredTime?: unknown;
@@ -132,12 +145,13 @@ export function asNumber(value: unknown, fallback = 0): number {
 
 export function formatPlan(plan: EsimPackage) {
   const volumeBytes = asNumber(plan.volume);
+  const priceUsd = asNumber(plan.price) / 10000;
   return {
     packageCode: asString(plan.packageCode),
     name: asString(plan.name, "Travel eSIM"),
     location: asString(plan.location),
-    priceUsd: asNumber(plan.price) / 10000,
-    retailPriceUsd: asNumber(plan.retailPrice) / 10000,
+    pricePhp: customerPricePhp(priceUsd),
+    priceUsd,
     volumeBytes,
     dataGb: volumeBytes / 1024 ** 3,
     duration: asNumber(plan.duration),
@@ -163,7 +177,7 @@ export function formatOrder(
     transactionId: asString(details.transactionId),
     packageCode,
     packageName,
-    priceUsd: plan.priceUsd,
+    pricePhp: plan.pricePhp,
     status: asString(details.esimStatus, "PROVISIONING"),
     smdpStatus: asString(details.smdpStatus, "PENDING"),
     iccid: typeof details.iccid === "string" ? details.iccid : null,
@@ -184,5 +198,54 @@ export function formatOrder(
         : plan.durationUnit || null,
     expiresAt:
       typeof details.expiredTime === "string" ? details.expiredTime : null,
+  };
+}
+
+export function formatLookup(
+  details: EsimDetails,
+  plan: ReturnType<typeof formatPlan>,
+) {
+  const totalVolumeBytes = asNumber(details.totalVolume, plan.volumeBytes) || null;
+  const usedBytes =
+    typeof details.orderUsage === "number" && Number.isFinite(details.orderUsage)
+      ? details.orderUsage
+      : null;
+  const remainingBytes =
+    totalVolumeBytes !== null && usedBytes !== null
+      ? Math.max(totalVolumeBytes - usedBytes, 0)
+      : null;
+  const packageCode =
+    asString(details.packageList?.[0]?.packageCode) || plan.packageCode;
+  const packageName =
+    asString(details.packageList?.[0]?.packageName) || plan.name;
+
+  return {
+    iccid: asString(details.iccid),
+    esimTranNo:
+      typeof details.esimTranNo === "string" ? details.esimTranNo : null,
+    orderNo: typeof details.orderNo === "string" ? details.orderNo : null,
+    transactionId:
+      typeof details.transactionId === "string" ? details.transactionId : null,
+    packageCode,
+    packageName,
+    totalVolumeBytes,
+    usedBytes,
+    remainingBytes,
+    totalDuration:
+      typeof details.totalDuration === "number"
+        ? details.totalDuration
+        : plan.duration || null,
+    durationUnit:
+      typeof details.durationUnit === "string"
+        ? details.durationUnit
+        : plan.durationUnit || null,
+    expiresAt:
+      typeof details.expiredTime === "string" ? details.expiredTime : null,
+    status: asString(details.esimStatus, "UNKNOWN"),
+    smdpStatus: asString(details.smdpStatus, "UNKNOWN"),
+    supportTopUp: plan.supportTopUp,
+    qrCodeUrl:
+      typeof details.qrCodeUrl === "string" ? details.qrCodeUrl : null,
+    shortUrl: typeof details.shortUrl === "string" ? details.shortUrl : null,
   };
 }

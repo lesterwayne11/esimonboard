@@ -34,8 +34,7 @@ export const GetEsimPlansResponse = zod.object({
   "packageCode": zod.string(),
   "name": zod.string(),
   "location": zod.string(),
-  "priceUsd": zod.number(),
-  "retailPriceUsd": zod.number(),
+  "pricePhp": zod.number(),
   "volumeBytes": zod.number(),
   "dataGb": zod.number(),
   "duration": zod.number(),
@@ -58,6 +57,93 @@ export const GetEsimBalanceResponse = zod.object({
 
 
 /**
+ * Returns only supplier information supported by the eSIM Access response.
+ * @summary Look up an eSIM by ICCID
+ */
+export const getEsimLookupQueryIccidMin = 10;
+
+
+
+export const GetEsimLookupQueryParams = zod.object({
+  "iccid": zod.coerce.string().min(getEsimLookupQueryIccidMin)
+})
+
+export const GetEsimLookupResponse = zod.object({
+  "iccid": zod.string(),
+  "esimTranNo": zod.string().nullable(),
+  "orderNo": zod.string().nullable(),
+  "transactionId": zod.string().nullable(),
+  "packageCode": zod.string(),
+  "packageName": zod.string(),
+  "totalVolumeBytes": zod.number().nullable(),
+  "usedBytes": zod.number().nullable(),
+  "remainingBytes": zod.number().nullable(),
+  "totalDuration": zod.number().nullable(),
+  "durationUnit": zod.string().nullable(),
+  "expiresAt": zod.string().nullable(),
+  "status": zod.string(),
+  "smdpStatus": zod.string(),
+  "supportTopUp": zod.boolean(),
+  "qrCodeUrl": zod.string().nullable(),
+  "shortUrl": zod.string().nullable()
+})
+
+
+/**
+ * @summary List compatible top-up packages
+ */
+export const getEsimTopupsQueryIccidMin = 10;
+
+
+
+export const GetEsimTopupsQueryParams = zod.object({
+  "iccid": zod.coerce.string().min(getEsimTopupsQueryIccidMin)
+})
+
+export const GetEsimTopupsResponse = zod.object({
+  "plans": zod.array(zod.object({
+  "packageCode": zod.string(),
+  "name": zod.string(),
+  "location": zod.string(),
+  "pricePhp": zod.number(),
+  "volumeBytes": zod.number(),
+  "dataGb": zod.number(),
+  "duration": zod.number(),
+  "durationUnit": zod.string(),
+  "supportTopUp": zod.boolean(),
+  "speed": zod.string(),
+  "activeType": zod.number()
+})),
+  "regions": zod.array(zod.string()),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Submit a top-up to eSIM Access
+ */
+export const createEsimTopupBodyIccidMin = 10;
+
+
+
+
+export const CreateEsimTopupBody = zod.object({
+  "iccid": zod.string().min(createEsimTopupBodyIccidMin),
+  "packageCode": zod.string().min(1)
+})
+
+export const CreateEsimTopupResponse = zod.object({
+  "transactionId": zod.string(),
+  "iccid": zod.string(),
+  "packageCode": zod.string(),
+  "packageName": zod.string(),
+  "pricePhp": zod.number(),
+  "status": zod.string(),
+  "message": zod.string()
+})
+
+
+/**
  * Places a live order against the connected eSIM Access account and waits briefly for provisioning details.
  * @summary Purchase an eSIM
  */
@@ -76,7 +162,7 @@ export const CreateEsimOrderResponse = zod.object({
   "transactionId": zod.string(),
   "packageCode": zod.string(),
   "packageName": zod.string(),
-  "priceUsd": zod.number(),
+  "pricePhp": zod.number(),
   "status": zod.string(),
   "smdpStatus": zod.string(),
   "iccid": zod.string().nullable(),
@@ -103,7 +189,7 @@ export const GetEsimOrderResponse = zod.object({
   "transactionId": zod.string(),
   "packageCode": zod.string(),
   "packageName": zod.string(),
-  "priceUsd": zod.number(),
+  "pricePhp": zod.number(),
   "status": zod.string(),
   "smdpStatus": zod.string(),
   "iccid": zod.string().nullable(),

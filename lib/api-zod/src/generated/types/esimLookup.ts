@@ -6,30 +6,33 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface EsimOrder {
-  orderNo: string;
-  transactionId: string;
-  packageCode: string;
-  packageName: string;
-  pricePhp: number;
-  status: string;
-  smdpStatus: string;
-  /** @nullable */
-  iccid: string | null;
+export interface EsimLookup {
+  iccid: string;
   /** @nullable */
   esimTranNo: string | null;
   /** @nullable */
-  qrCodeUrl: string | null;
+  orderNo: string | null;
   /** @nullable */
-  shortUrl: string | null;
+  transactionId: string | null;
+  packageCode: string;
+  packageName: string;
   /** @nullable */
   totalVolumeBytes: number | null;
   /** @nullable */
-  dataGb: number | null;
+  usedBytes: number | null;
+  /** @nullable */
+  remainingBytes: number | null;
   /** @nullable */
   totalDuration: number | null;
   /** @nullable */
   durationUnit: string | null;
   /** @nullable */
   expiresAt: string | null;
+  status: string;
+  smdpStatus: string;
+  supportTopUp: boolean;
+  /** @nullable */
+  qrCodeUrl: string | null;
+  /** @nullable */
+  shortUrl: string | null;
 }

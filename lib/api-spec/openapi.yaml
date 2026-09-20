@@ -76,6 +76,98 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /esim/lookup:
+    get:
+      operationId: getEsimLookup
+      tags: [esim]
+      summary: Look up an eSIM by ICCID
+      description: Returns only supplier information supported by the eSIM Access response.
+      parameters:
+        - name: iccid
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 10
+      responses:
+        "200":
+          description: eSIM details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimLookup"
+        "400":
+          description: Invalid ICCID or eSIM not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /esim/topups:
+    get:
+      operationId: getEsimTopups
+      tags: [esim]
+      summary: List compatible top-up packages
+      parameters:
+        - name: iccid
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 10
+      responses:
+        "200":
+          description: Compatible top-up packages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimPlansResponse"
+        "400":
+          description: Invalid ICCID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createEsimTopup
+      tags: [esim]
+      summary: Submit a top-up to eSIM Access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EsimTopupInput"
+      responses:
+        "201":
+          description: Top-up accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EsimTopup"
+        "400":
+          description: Invalid request or incompatible package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: eSIM provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /esim/orders:
     post:
       operationId: createEsimOrder
@@ -162,9 +254,7 @@ components:
           type: string
         location:
           type: string
-        priceUsd:
-          type: number
-        retailPriceUsd:
+        pricePhp:
           type: number
         volumeBytes:
           type: number
@@ -184,8 +274,7 @@ components:
         - packageCode
         - name
         - location
-        - priceUsd
-        - retailPriceUsd
+        - pricePhp
         - volumeBytes
         - dataGb
         - duration
@@ -217,6 +306,61 @@ components:
           type: number
       required:
         - balanceUsd
+    EsimLookup:
+      type: object
+      properties:
+        iccid:
+          type: string
+        esimTranNo:
+          type: ["string", "null"]
+        orderNo:
+          type: ["string", "null"]
+        transactionId:
+          type: ["string", "null"]
+        packageCode:
+          type: string
+        packageName:
+          type: string
+        totalVolumeBytes:
+          type: ["number", "null"]
+        usedBytes:
+          type: ["number", "null"]
+        remainingBytes:
+          type: ["number", "null"]
+        totalDuration:
+          type: ["number", "null"]
+        durationUnit:
+          type: ["string", "null"]
+        expiresAt:
+          type: ["string", "null"]
+        status:
+          type: string
+        smdpStatus:
+          type: string
+        supportTopUp:
+          type: boolean
+        qrCodeUrl:
+          type: ["string", "null"]
+        shortUrl:
+          type: ["string", "null"]
+      required:
+        - iccid
+        - esimTranNo
+        - orderNo
+        - transactionId
+        - packageCode
+        - packageName
+        - totalVolumeBytes
+        - usedBytes
+        - remainingBytes
+        - totalDuration
+        - durationUnit
+        - expiresAt
+        - status
+        - smdpStatus
+        - supportTopUp
+        - qrCodeUrl
+        - shortUrl
     EsimOrderInput:
       type: object
       properties:
@@ -229,6 +373,43 @@ components:
           maximum: 1
       required:
         - packageCode
+    EsimTopupInput:
+      type: object
+      properties:
+        iccid:
+          type: string
+          minLength: 10
+        packageCode:
+          type: string
+          minLength: 1
+      required:
+        - iccid
+        - packageCode
+    EsimTopup:
+      type: object
+      properties:
+        transactionId:
+          type: string
+        iccid:
+          type: string
+        packageCode:
+          type: string
+        packageName:
+          type: string
+        pricePhp:
+          type: number
+        status:
+          type: string
+        message:
+          type: string
+      required:
+        - transactionId
+        - iccid
+        - packageCode
+        - packageName
+        - pricePhp
+        - status
+        - message
     EsimOrder:
       type: object
       properties:
@@ -240,7 +421,7 @@ components:
           type: string
         packageName:
           type: string
-        priceUsd:
+        pricePhp:
           type: number
         status:
           type: string
@@ -269,7 +450,7 @@ components:
         - transactionId
         - packageCode
         - packageName
-        - priceUsd
+        - pricePhp
         - status
         - smdpStatus
         - iccid

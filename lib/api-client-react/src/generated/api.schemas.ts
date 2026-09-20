@@ -17,8 +17,7 @@ export interface EsimPlan {
   packageCode: string;
   name: string;
   location: string;
-  priceUsd: number;
-  retailPriceUsd: number;
+  pricePhp: number;
   volumeBytes: number;
   dataGb: number;
   duration: number;
@@ -38,6 +37,37 @@ export interface EsimBalance {
   balanceUsd: number;
 }
 
+export interface EsimLookup {
+  iccid: string;
+  /** @nullable */
+  esimTranNo: string | null;
+  /** @nullable */
+  orderNo: string | null;
+  /** @nullable */
+  transactionId: string | null;
+  packageCode: string;
+  packageName: string;
+  /** @nullable */
+  totalVolumeBytes: number | null;
+  /** @nullable */
+  usedBytes: number | null;
+  /** @nullable */
+  remainingBytes: number | null;
+  /** @nullable */
+  totalDuration: number | null;
+  /** @nullable */
+  durationUnit: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  status: string;
+  smdpStatus: string;
+  supportTopUp: boolean;
+  /** @nullable */
+  qrCodeUrl: string | null;
+  /** @nullable */
+  shortUrl: string | null;
+}
+
 export interface EsimOrderInput {
   /** @minLength 1 */
   packageCode: string;
@@ -48,12 +78,29 @@ export interface EsimOrderInput {
   count?: number;
 }
 
+export interface EsimTopupInput {
+  /** @minLength 10 */
+  iccid: string;
+  /** @minLength 1 */
+  packageCode: string;
+}
+
+export interface EsimTopup {
+  transactionId: string;
+  iccid: string;
+  packageCode: string;
+  packageName: string;
+  pricePhp: number;
+  status: string;
+  message: string;
+}
+
 export interface EsimOrder {
   orderNo: string;
   transactionId: string;
   packageCode: string;
   packageName: string;
-  priceUsd: number;
+  pricePhp: number;
   status: string;
   smdpStatus: string;
   /** @nullable */
@@ -79,5 +126,19 @@ export interface EsimOrder {
 export type GetEsimPlansParams = {
 locationCode?: string;
 iccid?: string;
+};
+
+export type GetEsimLookupParams = {
+/**
+ * @minLength 10
+ */
+iccid: string;
+};
+
+export type GetEsimTopupsParams = {
+/**
+ * @minLength 10
+ */
+iccid: string;
 };
 
