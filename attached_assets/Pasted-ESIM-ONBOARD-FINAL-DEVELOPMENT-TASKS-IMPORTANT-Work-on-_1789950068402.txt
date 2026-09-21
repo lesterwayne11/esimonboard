@@ -1,0 +1,467 @@
+ESIM ONBOARD – FINAL DEVELOPMENT TASKS
+
+IMPORTANT:
+Work on the EXISTING ESIM ONBOARD application.
+
+Do NOT rebuild the application from scratch.
+Do NOT replace the existing architecture.
+Do NOT remove or break any currently working functionality.
+
+The existing eSIM plan loading, ICCID lookup, eSIM purchase/provisioning, QR code generation, and API integration are already working. Preserve them.
+
+Only implement the following tasks.
+
+==================================================
+1. CREATE ACCOUNT + SIMPLE LOGIN + GUEST LOGIN
+==================================================
+
+Add a simple customer account system.
+
+Customer registration:
+- Name
+- Email
+- Password
+
+Login:
+- Email
+- Password
+
+Do NOT require email verification for now.
+
+Add:
+- Create Account
+- Log In
+- Continue as Guest
+
+Guest users must still be able to:
+- Browse eSIM plans
+- Search plans
+- Purchase an eSIM
+- Use ICCID lookup
+
+Registered users should have access to their customer dashboard.
+
+Keep authentication simple and mobile friendly.
+
+==================================================
+2. CUSTOMER DASHBOARD
+==================================================
+
+Create a customer dashboard for logged-in users.
+
+The dashboard should show:
+
+- Active eSIMs
+- Remaining data
+- Used data
+- Data allowance
+- Expiry date
+- Recent orders
+
+Provide clear navigation to:
+
+- My eSIMs
+- Orders
+- Top Up
+- Account
+
+Use real data from the existing backend/API/database.
+
+Do NOT create fake data if real data is already available.
+
+==================================================
+3. MY ESIMS
+==================================================
+
+Create/finalize the "My eSIMs" section.
+
+Each eSIM should show:
+
+- Country / Region
+- Plan name
+- Data allowance
+- Remaining data
+- Used data
+- Validity
+- Expiry date
+- ICCID
+- Status
+
+Possible statuses:
+
+- Active
+- Expired
+- Not Installed
+- Low Data
+
+Allow the customer to open an eSIM detail page.
+
+Keep the existing QR code functionality.
+
+==================================================
+4. ORDER HISTORY
+==================================================
+
+Create/finalize the customer "Orders" section.
+
+Show:
+
+- Order number
+- Date
+- eSIM / Plan
+- Country / Region
+- Amount paid
+- Payment status
+- eSIM status
+
+Customers should be able to open an order to see its details.
+
+Use real order data.
+
+==================================================
+5. ADMIN DASHBOARD
+==================================================
+
+Create an ADMIN DASHBOARD.
+
+IMPORTANT:
+Only authorized admin users can access this dashboard.
+
+The admin dashboard should allow me to manage the eSIM store.
+
+Include:
+
+A. Dashboard overview
+
+Show useful statistics such as:
+
+- Total orders
+- Total customers
+- Total eSIMs sold
+- Active eSIMs
+- Revenue
+- Recent orders
+
+B. eSIM PLANS
+
+Create a plan management section where I can see all available eSIM plans.
+
+For every plan, show:
+
+- Country
+- Region
+- Data
+- Validity
+- Provider/base price
+- Customer selling price
+- Status
+
+==================================================
+6. PLAN MARKUP / SELLING PRICE
+==================================================
+
+This is very important.
+
+I want to control my selling price from the ADMIN DASHBOARD.
+
+For every eSIM plan, allow me to set a markup or selling price.
+
+Example:
+
+Provider price:
+₱100
+
+My markup:
+₱50
+
+Customer price:
+₱150
+
+The customer should only see the final selling price.
+
+The provider/base cost must remain hidden from customers.
+
+I should be able to update the markup/selling price from the admin dashboard.
+
+Do NOT hard-code the selling prices into the frontend.
+
+The admin dashboard should be the place where I manage pricing.
+
+Make sure the pricing system works for ALL available eSIM plans, not only selected countries.
+
+==================================================
+7. ADMIN LOG / ACTIVITY LOG
+==================================================
+
+Create an Admin Activity Log.
+
+I want to see important actions performed inside the admin dashboard.
+
+For example:
+
+- Admin logged in
+- Admin changed an eSIM plan price
+- Admin updated markup
+- Admin enabled/disabled a plan
+- Customer account created
+- Order created
+- Payment status changed
+- eSIM provisioned
+- Top-up completed
+- Top-up failed
+
+Each log should include:
+
+- Date and time
+- Action
+- User/admin
+- Related order/customer/plan when applicable
+- Result/status
+
+Example:
+
+[2026-09-20 14:32]
+Admin
+Updated plan price
+Japan 10GB / 30 Days
+Old price: ₱450
+New price: ₱475
+Success
+
+The activity log should be visible only to authorized admins.
+
+==================================================
+8. FIX TOP-UP EXISTING ESIM PLAN LIST
+==================================================
+
+Fix the existing Top Up functionality.
+
+The current Top Up plan list contains many repeated or confusing plans.
+
+Do NOT simply delete plans based only on identical data.
+
+Inspect the actual provider/API response and determine why the plans appear duplicated.
+
+For the customer:
+
+Only show top-up packages that are actually compatible with the selected eSIM.
+
+Present them in a clean and understandable list.
+
+Example:
+
+TOP UP YOUR ESIM
+
+3 GB · 30 Days · ₱XXX
+5 GB · 30 Days · ₱XXX
+10 GB · 30 Days · ₱XXX
+
+Do not expose unnecessary provider IDs or internal technical information.
+
+Preserve the provider/package identifiers internally so the correct top-up package is purchased.
+
+The top-up must continue using the correct existing API/provider logic.
+
+Do not break existing top-up functionality.
+
+==================================================
+9. HOME PAGE – SMALLER HERO
+==================================================
+
+Make the current hero section smaller on mobile.
+
+Keep the existing branding and design:
+
+ESIM ONBOARD
+
+Stay online.
+Stay on course.
+
+But reduce the vertical height so customers can reach the actual eSIM plans faster.
+
+Do NOT remove the hero completely.
+
+The hero should take less screen space.
+
+==================================================
+10. HOME PAGE – SEARCH BAR
+==================================================
+
+Add a prominent eSIM search bar near the top of the Home page.
+
+Example:
+
+Search eSIM plans
+[ Search by country or region ]
+
+The user should be able to search for:
+
+- Country
+- Region
+- eSIM plan
+- Data size
+
+Example searches:
+
+Japan
+United States
+Canada
+Asia
+Africa
+Europe
+
+Search should use the existing available eSIM plan data.
+
+Do not create fake search results.
+
+Add a clear button:
+
+Search Plans
+
+==================================================
+11. HOME PAGE – BROWSE / PLAN CATEGORIES
+==================================================
+
+Rearrange the Home page so customers can easily browse eSIM plans by region.
+
+Create clean category sections such as:
+
+AFRICA ESIM
+
+ASIA ESIM
+
+EUROPE ESIM
+
+NORTH AMERICA ESIM
+
+SOUTH AMERICA ESIM
+
+OCEANIA ESIM
+
+MIDDLE EAST ESIM
+
+GLOBAL ESIM
+
+The exact categories should be based on the actual available plans.
+
+Do not show a region if there are no available plans.
+
+Each region should have a clean section/card.
+
+Example:
+
+ASIA ESIM
+
+Japan
+South Korea
+Singapore
+Thailand
+Philippines
+etc.
+
+AFRICA ESIM
+
+Egypt
+South Africa
+Morocco
+Kenya
+etc.
+
+Customers should be able to tap a region and browse the available plans.
+
+Keep the Home page clean and avoid showing hundreds of plans at once.
+
+==================================================
+12. FINAL UI POLISH
+==================================================
+
+After implementing the features above, perform a final UI polish.
+
+Keep the current ESIM ONBOARD visual identity:
+
+- Cream/off-white background
+- Dark navy
+- Teal
+- Coral accent
+- Rounded cards
+- Clean typography
+- Maritime/seafarer aesthetic
+
+Do NOT redesign the entire application.
+
+Improve:
+
+- Spacing
+- Typography hierarchy
+- Button consistency
+- Card sizing
+- Mobile responsiveness
+- Loading states
+- Empty states
+- Error states
+- Navigation consistency
+- Form appearance
+- Search experience
+
+Keep the existing bottom navigation:
+
+Home
+My eSIMs
+Orders
+Account
+
+Do not add unnecessary navigation items.
+
+==================================================
+IMPORTANT DEVELOPMENT RULES
+==================================================
+
+1. Inspect the existing code before making changes.
+
+2. Reuse existing components and API functions whenever possible.
+
+3. Do NOT rebuild working eSIM functionality.
+
+4. Do NOT replace the existing eSIM provider/API integration.
+
+5. Do NOT remove the existing ICCID lookup.
+
+6. Do NOT remove the existing QR code generation.
+
+7. Do NOT replace working purchase/provisioning logic.
+
+8. Do NOT use fake data where real API/database data already exists.
+
+9. Keep provider/base prices hidden from customers.
+
+10. Customer-facing prices must come from the admin-controlled selling price/markup.
+
+11. Admin functionality must be protected from normal customers and guests.
+
+12. Keep the application mobile-first because the primary users are seafarers using phones.
+
+13. Make the smallest necessary code changes.
+
+14. Do not change unrelated functionality.
+
+15. After implementation, verify that the application still builds and that existing eSIM functionality still works.
+
+FINAL GOAL:
+
+The finished ESIM ONBOARD application should have:
+
+- Simple customer registration/login
+- Guest login/access
+- Customer dashboard
+- My eSIMs
+- Order history
+- Working top-up with a clean compatible plan list
+- Admin dashboard
+- Admin activity/log details
+- Admin-controlled markup/selling prices for all eSIM plans
+- Home page search
+- Regional eSIM categories
+- Smaller hero section
+- Final mobile UI polish
+
+Keep the existing ESIM ONBOARD design and working eSIM functionality intact.

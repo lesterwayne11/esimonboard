@@ -27,6 +27,14 @@ import {
   type EsimDetails,
   type EsimPackage,
 } from "../lib/esim-access";
+import {
+  customerPlanPrice,
+  getPlanByCode,
+  listCustomerPlans,
+  logActivity,
+  persistOrder,
+  upsertProviderPlan,
+} from "../lib/store";
 
 const router: IRouter = Router();
 
@@ -66,7 +74,41 @@ async function findPlan(packageCode: string) {
   const packageRecord = packages.find(
     (candidate) => asString(candidate.packageCode) === packageCode,
   );
-  return packageRecord ? formatPlan(packageRecord) : null;
+  if (!packageRecord) return null;
+  const formatted = formatPlan(packageRecord);
+  const stored = await upsertProviderPlan({
+    packageCode: formatted.packageCode,
+    name: formatted.name,
+    location: formatted.location,
+    providerPricePhp: formatted.providerPricePhp,
+    volumeBytes: formatted.volumeBytes,
+    dataGb: formatted.dataGb,
+    duration: formatted.duration,
+    durationUnit: formatted.durationUnit,
+    supportTopUp: formatted.supportTopUp,
+    speed: formatted.speed,
+    activeType: formatted.activeType,
+  });
+  if (!stored.enabled) return null;
+  return { ...formatted, pricePhp: customerPlanPrice(stored) };
+}
+
+async function syncPlan(packageRecord: EsimPackage) {
+  const formatted = formatPlan(packageRecord);
+  const stored = await upsertProviderPlan({
+    packageCode: formatted.packageCode,
+    name: formatted.name,
+    location: formatted.location,
+    providerPricePhp: formatted.providerPricePhp,
+    volumeBytes: formatted.volumeBytes,
+    dataGb: formatted.dataGb,
+    duration: formatted.duration,
+    durationUnit: formatted.durationUnit,
+    supportTopUp: formatted.supportTopUp,
+    speed: formatted.speed,
+    activeType: formatted.activeType,
+  });
+  return { ...formatted, pricePhp: customerPlanPrice(stored), enabled: stored.enabled };
 }
 
 async function fetchOrderDetails(orderNo: string): Promise<EsimDetails | null> {
@@ -139,9 +181,22 @@ router.get("/esim/plans", async (req, res): Promise<void> => {
 
   try {
     const packages = await fetchPackages(parsed.data);
-    const plans = packages
-      .map(formatPlan)
-      .filter((plan) => plan.packageCode.length > 0);
+    await Promise.all(packages.filter((plan) => asString(plan.packageCode)).map(syncPlan));
+    const providerCodes = new Set(packages.map((plan) => asString(plan.packageCode)).filter(Boolean));
+    const storedPlans = (await listCustomerPlans()).filter((plan) => providerCodes.has(plan.packageCode));
+    const plans = storedPlans.map((plan) => ({
+      packageCode: plan.packageCode,
+      name: plan.name,
+      location: plan.location,
+      pricePhp: customerPlanPrice(plan),
+      volumeBytes: plan.volumeBytes,
+      dataGb: Number(plan.dataGb),
+      duration: plan.duration,
+      durationUnit: plan.durationUnit,
+      supportTopUp: plan.supportTopUp,
+      speed: plan.speed,
+      activeType: plan.activeType,
+    }));
     const regions = Array.from(
       new Set(
         packages
@@ -216,8 +271,12 @@ router.get("/esim/topups", async (req, res): Promise<void> => {
 
   try {
     const packages = await fetchPackages({ iccid: parsed.data.iccid });
-    const plans = packages
-      .map(formatPlan)
+    const uniquePackages = new Map<string, EsimPackage>();
+    for (const packageRecord of packages) {
+      const packageCode = asString(packageRecord.packageCode);
+      if (packageCode && !uniquePackages.has(packageCode)) uniquePackages.set(packageCode, packageRecord);
+    }
+    const plans = (await Promise.all(Array.from(uniquePackages.values()).map(syncPlan)))
       .filter((plan) => plan.packageCode.length > 0 && plan.supportTopUp);
     res.json(
       GetEsimTopupsResponse.parse({
@@ -272,6 +331,38 @@ router.post("/esim/orders", async (req, res): Promise<void> => {
         plan,
       ),
     );
+    try {
+      await persistOrder({
+        customerId: req.user?.id,
+        orderNo: response.orderNo,
+        transactionId: response.transactionId,
+        packageCode: response.packageCode,
+        packageName: response.packageName,
+        location: plan.location,
+        dataGb: response.dataGb,
+        totalVolumeBytes: response.totalVolumeBytes,
+        totalDuration: response.totalDuration,
+        durationUnit: response.durationUnit,
+        amountPhp: response.pricePhp,
+        esimStatus: response.status,
+        smdpStatus: response.smdpStatus,
+        iccid: response.iccid,
+        esimTranNo: response.esimTranNo,
+        qrCodeUrl: response.qrCodeUrl,
+        shortUrl: response.shortUrl,
+        expiresAt: response.expiresAt,
+      });
+      await logActivity({
+        actor: req.user?.email ?? "Guest",
+        action: "Order created",
+        relatedOrderNo: response.orderNo,
+        relatedCustomerId: req.user?.id,
+        relatedPackageCode: response.packageCode,
+        details: { paymentStatus: "DEMO_NOT_CHARGED" },
+      });
+    } catch (persistenceError) {
+      req.log.error({ err: persistenceError, orderNo: response.orderNo }, "Order created but could not be persisted");
+    }
     res.status(201).json(response);
   } catch (error) {
     req.log.error({ err: error }, "Unable to create eSIM order");
@@ -315,7 +406,14 @@ router.post("/esim/topups", async (req, res): Promise<void> => {
       packageCode: parsed.data.packageCode,
       transactionId,
     });
-    const plan = formatPlan(packageRecord);
+    const plan = await syncPlan(packageRecord);
+    await logActivity({
+      actor: req.user?.email ?? "Guest",
+      action: "Top-up submitted",
+      relatedCustomerId: req.user?.id,
+      relatedPackageCode: plan.packageCode,
+      details: { iccid: parsed.data.iccid, transactionId },
+    });
     res.status(201).json(
       CreateEsimTopupResponse.parse({
         transactionId,

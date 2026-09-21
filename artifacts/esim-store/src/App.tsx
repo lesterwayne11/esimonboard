@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import {
   ArrowRight,
+  BarChart3,
   Check,
   ChevronDown,
   CircleAlert,
@@ -50,6 +51,130 @@ const queryClient = new QueryClient();
 const ORDER_STORAGE_KEY = 'esim-onboard-last-orders';
 const WELCOME_STORAGE_KEY = 'esim-onboard-welcome-seen';
 
+type AuthUser = { id: string; name: string; email: string; role: string };
+type RemoteOrder = EsimOrder & {
+  location?: string;
+  amountPhp?: number;
+  paymentStatus?: string;
+  esimStatus?: string;
+  usedBytes?: number | null;
+  remainingBytes?: number | null;
+  createdAt?: string;
+};
+type CustomerDashboard = {
+  user: AuthUser;
+  activeEsims: RemoteOrder[];
+  recentOrders: RemoteOrder[];
+};
+
+type AuthContextValue = {
+  user: AuthUser | null;
+  isLoading: boolean;
+  error: string;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  clearError: () => void;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Something went wrong');
+  return data as T;
+}
+
+function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    requestJson<{ user: AuthUser | null }>('/api/auth/me')
+      .then((result) => setUser(result.user))
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false));
+  }, []);
+  const login = useCallback(async (email: string, password: string) => {
+    setError('');
+    try {
+      const result = await requestJson<{ user: AuthUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      setUser(result.user);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Unable to log in';
+      setError(message);
+      throw cause;
+    }
+  }, []);
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    setError('');
+    try {
+      const result = await requestJson<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) });
+      setUser(result.user);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Unable to create account';
+      setError(message);
+      throw cause;
+    }
+  }, []);
+  const logout = useCallback(async () => {
+    await requestJson('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+  }, []);
+  return <AuthContext.Provider value={{ user, isLoading, error, login, register, logout, clearError: () => setError('') }}>{children}</AuthContext.Provider>;
+}
+
+function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  return context;
+}
+
+function toEsimOrder(order: RemoteOrder): EsimOrder {
+  return {
+    orderNo: order.orderNo,
+    transactionId: order.transactionId,
+    packageCode: order.packageCode,
+    packageName: order.packageName,
+    pricePhp: order.amountPhp ?? order.pricePhp,
+    status: order.esimStatus ?? order.status,
+    smdpStatus: order.smdpStatus,
+    iccid: order.iccid,
+    esimTranNo: order.esimTranNo,
+    qrCodeUrl: order.qrCodeUrl,
+    shortUrl: order.shortUrl,
+    totalVolumeBytes: order.totalVolumeBytes,
+    dataGb: order.dataGb,
+    totalDuration: order.totalDuration,
+    durationUnit: order.durationUnit,
+    expiresAt: order.expiresAt,
+  };
+}
+
+function useCustomerDashboard() {
+  const { user } = useAuth();
+  const [dashboard, setDashboard] = useState<CustomerDashboard | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const refresh = useCallback(() => {
+    if (!user) {
+      setDashboard(null);
+      return Promise.resolve();
+    }
+    setIsLoading(true);
+    return requestJson<CustomerDashboard>('/api/customer/dashboard')
+      .then(setDashboard)
+      .catch(() => setDashboard(null))
+      .finally(() => setIsLoading(false));
+  }, [user]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  return { dashboard, isLoading, refresh };
+}
+
 function formatPhp(valuePhp: number | null | undefined) {
   if (valuePhp === null || valuePhp === undefined || Number.isNaN(valuePhp)) return '—';
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(valuePhp);
@@ -70,6 +195,14 @@ function formatData(plan: Pick<EsimPlan, 'dataGb' | 'volumeBytes'> | Pick<EsimOr
   if ('dataGb' in plan && plan.dataGb) return `${plan.dataGb} GB`;
   const bytes = 'volumeBytes' in plan ? plan.volumeBytes : plan.totalVolumeBytes;
   return bytes ? `${(bytes / 1073741824).toFixed(1)} GB` : 'Pending';
+}
+
+function displayEsimStatus(order: EsimOrder, remainingBytes?: number | null) {
+  if (order.expiresAt && new Date(order.expiresAt).getTime() < Date.now()) return 'Expired';
+  if (!order.iccid) return 'Not Installed';
+  if (remainingBytes !== null && remainingBytes !== undefined && remainingBytes <= 0) return 'Low Data';
+  if (order.status.toUpperCase().includes('ACTIVE') || order.smdpStatus.toUpperCase().includes('ENABLED')) return 'Active';
+  return order.status || 'Provisioning';
 }
 
 function readSavedOrders(): EsimOrder[] {
@@ -96,12 +229,13 @@ function Brand() {
 }
 
 function Header() {
+  const { user, isLoading } = useAuth();
   return (
     <header className="site-header">
       <Brand />
       <div className="header-actions">
-        <span className="header-mode">Demo mode</span>
-        <span className="avatar" data-testid="display-account-avatar">E</span>
+        <span className="header-mode">{isLoading ? 'Loading' : user ? user.name : 'Guest mode'}</span>
+        <Link href="/account" className="avatar" data-testid="display-account-avatar" aria-label="Open account">{user ? user.name.slice(0, 1).toUpperCase() : 'E'}</Link>
       </div>
     </header>
   );
@@ -142,7 +276,7 @@ function WelcomeStrip() {
   return (
     <section className="welcome-strip" aria-label="Welcome to ESIM ONBOARD">
       <div><ShieldCheck size={18} /><div><strong>Welcome aboard.</strong><span>Browse live plans now, or check an existing eSIM as a guest.</span></div></div>
-      <div className="welcome-actions"><Link href="/guest" className="button-quiet">Guest lookup</Link><button onClick={dismiss} aria-label="Dismiss welcome message">Dismiss</button></div>
+      <div className="welcome-actions"><Link href="/account" className="button-quiet">Create account</Link><Link href="/guest" className="button-quiet">Guest lookup</Link><button onClick={dismiss} aria-label="Dismiss welcome message">Dismiss</button></div>
     </section>
   );
 }
@@ -238,6 +372,8 @@ function Catalog() {
   const [compareCodes, setCompareCodes] = useState<string[]>([]);
   const [purchasePlan, setPurchasePlan] = useState<EsimPlan | null>(null);
   const [savedOrders] = useState<EsimOrder[]>(readSavedOrders);
+  const { user } = useAuth();
+  const { dashboard } = useCustomerDashboard();
   const plans = plansQuery.data?.plans ?? [];
   const regions = plansQuery.data?.regions ?? [];
   const filteredPlans = useMemo(() => plans.filter((plan) => {
@@ -245,19 +381,22 @@ function Catalog() {
     return matchesRegion && `${plan.name} ${plan.location} ${plan.packageCode}`.toLowerCase().includes(search.toLowerCase().trim());
   }), [plans, region, search]);
   const comparePlans = compareCodes.map((code) => plans.find((plan) => plan.packageCode === code)).filter((plan): plan is EsimPlan => Boolean(plan));
+  const regionCards = regions.map((item) => ({ name: item, plans: plans.filter((plan) => plan.location === item) })).filter((item) => item.plans.length > 0);
+  const showRegionCards = !search.trim() && region === 'All destinations';
   const toggleCompare = (code: string) => setCompareCodes((current) => current.includes(code) ? current.filter((item) => item !== code) : current.length < 3 ? [...current, code] : current);
   return (
     <AppLayout>
       <main className="main-frame">
         <section className="hero"><div className="hero-copy"><div className="eyebrow">Connectivity for the watch</div><h1>Stay online.<br /><span>Stay on course.</span></h1><p className="hero-subtitle">Fast, clear eSIM plans for seafarers. See what is left, know when it expires, and keep your next port within reach.</p></div><div className="hero-signal" aria-hidden="true"><b /><i /><Globe2 size={16} /><i /><b /></div></section>
         <WelcomeStrip />
-      <Dashboard lastOrder={savedOrders[0]} />
+      <Dashboard lastOrder={user ? dashboard?.recentOrders[0] ? toEsimOrder(dashboard.recentOrders[0]) : undefined : savedOrders[0]} />
         <section className="content-intro"><div><div className="section-kicker">Live carrier catalog</div><h2>Choose your next route</h2></div><span className="result-note">{plansQuery.data ? `${filteredPlans.length} of ${plansQuery.data.total} plans` : 'Loading live plans'}</span></section>
-        <div className="filters"><label className="search-box"><Search size={15} className="filter-icon" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a country or region" aria-label="Search plans" /></label><label className="select-box"><MapPin size={14} className="filter-icon" /><select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Filter by destination"><option>All destinations</option>{regions.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} className="filter-icon" /></label><button className="compare-button" onClick={() => setCompareCodes(compareCodes.length ? compareCodes : filteredPlans.slice(0, 2).map((plan) => plan.packageCode))} disabled={!plans.length}><Sparkles size={14} /> Compare {compareCodes.length > 0 && `(${compareCodes.length})`}</button></div>
+        <div className="filters"><label className="search-box"><Search size={15} className="filter-icon" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by country, region, plan, or data" aria-label="Search plans" /></label><button className="search-submit" type="button" onClick={() => document.querySelector<HTMLInputElement>('.search-box input')?.focus()}>Search Plans</button><label className="select-box"><MapPin size={14} className="filter-icon" /><select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Filter by destination"><option>All destinations</option>{regions.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} className="filter-icon" /></label><button className="compare-button" onClick={() => setCompareCodes(compareCodes.length ? compareCodes : filteredPlans.slice(0, 2).map((plan) => plan.packageCode))} disabled={!plans.length}><Sparkles size={14} /> Compare {compareCodes.length > 0 && `(${compareCodes.length})`}</button></div>
         {plansQuery.isLoading && <div className="plans-loading">{[1, 2, 3].map((item) => <div className="skeleton" key={item} />)}</div>}
         {plansQuery.isError && <div className="error-state"><span className="state-icon"><CircleAlert size={21} /></span><h3>Plans took a wrong turn</h3><p>We could not reach the live catalog. Your account is safe; please try again.</p><button className="button-dark" onClick={() => plansQuery.refetch()}><RefreshCw size={14} /> Try again</button></div>}
         {!plansQuery.isLoading && !plansQuery.isError && !filteredPlans.length && <div className="empty-state"><span className="state-icon"><PackageOpen size={21} /></span><h3>No plans match that search</h3><p>Try a broader destination or clear your search to see every live plan.</p><button className="button-dark" onClick={() => { setSearch(''); setRegion('All destinations'); }}>Clear filters</button></div>}
-        {!plansQuery.isLoading && !plansQuery.isError && filteredPlans.length > 0 && <div className="plans-grid">{filteredPlans.map((plan, index) => <PlanCard key={plan.packageCode} plan={plan} index={index} selected={compareCodes.includes(plan.packageCode)} onCompare={() => toggleCompare(plan.packageCode)} onBuy={() => setPurchasePlan(plan)} />)}</div>}
+         {!plansQuery.isLoading && !plansQuery.isError && showRegionCards && <div className="region-grid">{regionCards.map((section) => <article className="region-card" key={section.name}><div className="card-label">{section.name} eSIM</div><h3>{section.name}</h3><div className="region-plan-preview">{section.plans.slice(0, 4).map((plan) => <button type="button" key={plan.packageCode} onClick={() => setPurchasePlan(plan)}><span>{plan.name}</span><b>{formatData(plan)}</b></button>)}</div><button className="region-browse" type="button" onClick={() => setRegion(section.name)}>Browse {section.name} <ArrowRight size={13} /></button></article>)}</div>}
+         {!plansQuery.isLoading && !plansQuery.isError && !showRegionCards && filteredPlans.length > 0 && <div className="plans-grid">{filteredPlans.map((plan, index) => <PlanCard key={plan.packageCode} plan={plan} index={index} selected={compareCodes.includes(plan.packageCode)} onCompare={() => toggleCompare(plan.packageCode)} onBuy={() => setPurchasePlan(plan)} />)}</div>}
         {comparePlans.length >= 2 && <ComparePanel plans={comparePlans} onClose={() => setCompareCodes([])} onRemove={toggleCompare} />}
       </main>
       {purchasePlan && <PurchaseModal plan={purchasePlan} onClose={() => setPurchasePlan(null)} />}
@@ -276,22 +415,78 @@ function CopyValue({ value, label }: { value: string; label: string }) {
 }
 
 function EsimsPage() {
-  const [orders, setOrders] = useState<EsimOrder[]>(readSavedOrders);
+  const { user } = useAuth();
+  const { dashboard, isLoading } = useCustomerDashboard();
+  const [savedOrders] = useState<EsimOrder[]>(readSavedOrders);
+  const orders = user ? (dashboard?.activeEsims ?? []).map(toEsimOrder) : savedOrders;
+  const remoteLatest = dashboard?.activeEsims[0];
   const latest = orders[0];
   return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Your connectivity</div><h1>My eSIMs</h1></div><Link href="/" className="button-primary"><Plus size={14} /> Add data</Link></section>
-    {latest ? <article className="surface-card" data-testid="active-esim-card"><div className="card-label">Most recent profile</div><h2 className="plan-name">{latest.packageName}</h2><div className="esim-meter pending"><span /></div><div className="esim-stat-row"><span>Allowance</span><strong>{formatData(latest)}</strong></div><div className="esim-stat-row"><span>ICCID</span><strong>{latest.iccid ? `${latest.iccid.slice(0, 6)}…${latest.iccid.slice(-4)}` : 'Provisioning'}</strong></div><div className="esim-stat-row"><span>Expires</span><strong>{latest.expiresAt ? new Date(latest.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Carrier pending'}</strong></div><div><Link className="topup-button" href={latest.iccid ? `/guest?iccid=${encodeURIComponent(latest.iccid)}` : '/guest'}><Plus size={13} /> Check top-up options</Link></div><Link href={`/order/${latest.orderNo}`} className="dashboard-link" style={{ position: 'static', marginTop: 16 }}>Open QR and install details <ArrowRight size={13} /></Link></article> : <div className="empty-state"><span className="state-icon"><Smartphone size={21} /></span><h3>No eSIMs saved yet</h3><p>Choose a live plan and your install details will appear here after provisioning.</p><Link href="/" className="button-dark">Browse live plans <ArrowRight size={14} /></Link></div>}
+    {isLoading && <div className="plans-loading"><div className="skeleton" /><div className="skeleton" /></div>}
+    {!isLoading && latest ? <article className="surface-card" data-testid="active-esim-card"><div className="card-label">Most recent profile</div><h2 className="plan-name">{latest.packageName}</h2><p className="lookup-note">{remoteLatest?.location ?? 'Carrier profile'}</p><div className="esim-meter pending"><span /></div><div className="esim-stat-row"><span>Allowance</span><strong>{formatData(latest)}</strong></div><div className="esim-stat-row"><span>Remaining data</span><strong>{formatBytes(remoteLatest?.remainingBytes)}</strong></div><div className="esim-stat-row"><span>Used data</span><strong>{formatBytes(remoteLatest?.usedBytes)}</strong></div><div className="esim-stat-row"><span>ICCID</span><strong>{latest.iccid ? `${latest.iccid.slice(0, 6)}…${latest.iccid.slice(-4)}` : 'Provisioning'}</strong></div><div className="esim-stat-row"><span>Status</span><strong>{displayEsimStatus(latest, remoteLatest?.remainingBytes)}</strong></div><div className="esim-stat-row"><span>Expires</span><strong>{latest.expiresAt ? new Date(latest.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Carrier pending'}</strong></div><div><Link className="topup-button" href={latest.iccid ? `/guest?iccid=${encodeURIComponent(latest.iccid)}` : '/guest'}><Plus size={13} /> Check top-up options</Link></div><Link href={`/order/${latest.orderNo}`} className="dashboard-link" style={{ position: 'static', marginTop: 16 }}>Open QR and install details <ArrowRight size={13} /></Link></article> : !isLoading && <div className="empty-state"><span className="state-icon"><Smartphone size={21} /></span><h3>No eSIMs saved yet</h3><p>Choose a live plan and your install details will appear here after provisioning.</p><Link href="/" className="button-dark">Browse live plans <ArrowRight size={14} /></Link></div>}
     <article className="surface-card"><div className="card-label">Need to reconnect?</div><h2 className="plan-name">Look up a profile by ICCID</h2><p className="lookup-note">Use the carrier identifier from your phone settings to find an existing installation. We will never pretend a lookup succeeded when the carrier is unavailable.</p><Link href="/guest" className="button-quiet" style={{ marginTop: 15 }}>Open guest lookup <ArrowRight size={13} /></Link></article>
   </main></AppLayout>;
 }
 
 function OrdersPage() {
-  const [orders] = useState<EsimOrder[]>(readSavedOrders);
-  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Local demo history</div><h1>Orders</h1></div><p>Last {orders.length} saved locally</p></section><article className="surface-card"><div className="card-label">Provisioning history</div>{orders.length ? <div className="order-list" style={{ marginTop: 17 }}>{orders.map((order) => <Link href={`/order/${order.orderNo}`} className="order-list-item" key={order.orderNo}><div><strong>{order.packageName}</strong><span>{order.orderNo} · {formatPhp(order.pricePhp)}</span></div><span className={`status-badge ${order.qrCodeUrl ? 'status-ready' : 'status-pending'}`}>{order.qrCodeUrl ? 'Ready' : 'Processing'}</span><ArrowRight size={14} /></Link>)}</div> : <div className="empty-inline"><PackageOpen size={17} /> No orders on this device yet.</div>}<p className="lookup-note">This history is demo-only local storage for this browser. It is not secure account persistence and is not shared across devices.</p></article></main></AppLayout>;
+  const { user } = useAuth();
+  const { dashboard, isLoading } = useCustomerDashboard();
+  const [savedOrders] = useState<EsimOrder[]>(readSavedOrders);
+  const remoteOrders = dashboard?.recentOrders ?? [];
+  const orders = user ? remoteOrders.map(toEsimOrder) : savedOrders;
+  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">{user ? 'Customer history' : 'Guest demo history'}</div><h1>Orders</h1></div><p>{orders.length} recent orders</p></section><article className="surface-card"><div className="card-label">Order history</div>{isLoading && <div className="plans-loading"><div className="skeleton" /></div>}{!isLoading && orders.length ? <div className="order-list" style={{ marginTop: 17 }}>{orders.map((order) => { const remote = remoteOrders.find((item) => item.orderNo === order.orderNo); return <Link href={`/order/${order.orderNo}`} className="order-list-item" key={order.orderNo}><div><strong>{order.packageName}</strong><span>{remote?.location ?? 'Guest order'} · {remote?.createdAt ? new Date(remote.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : order.orderNo} · {formatPhp(order.pricePhp)}</span><small>{remote?.paymentStatus ?? 'DEMO_NOT_CHARGED'} · {displayEsimStatus(order)}</small></div><span className={`status-badge ${order.qrCodeUrl ? 'status-ready' : 'status-pending'}`}>{order.qrCodeUrl ? 'Ready' : 'Processing'}</span><ArrowRight size={14} /></Link>; })}</div> : !isLoading && <div className="empty-inline"><PackageOpen size={17} /> No orders saved yet.</div>}<p className="lookup-note">{user ? 'Orders are stored in your customer account.' : 'Guest history is kept locally in this browser. Create an account to keep orders across devices.'}</p></article></main></AppLayout>;
 }
 
 function AccountPage() {
+  const { user, isLoading, error, login, register, logout, clearError } = useAuth();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [supportMessage, setSupportMessage] = useState('');
-  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Crew settings</div><h1>Account</h1></div></section><article className="surface-card"><div className="card-label">ESIM ONBOARD demo session</div><h2 className="plan-name">Welcome, crew member</h2><p className="lookup-note">This preview has no sign-in or secure account persistence. Your last orders stay in this browser only so you can continue the demo journey.</p><div className="help-grid"><button className="help-tile" onClick={() => setSupportMessage('Support contact is not connected in this demo.')}><HelpCircle size={17} /><strong>Get help</strong><span>Installation and carrier guidance</span></button><button className="help-tile" onClick={() => setSupportMessage('Network status is available from each live order detail page.')}><Settings2 size={17} /><strong>Network status</strong><span>Check provisioning details</span></button></div>{supportMessage && <p className="lookup-note" role="status">{supportMessage}</p>}</article><article className="surface-card"><div className="card-label">Pricing note</div><h2 className="plan-name">Clear numbers, no surprises</h2><p className="lookup-note">Customer-facing prices are shown in Philippine pesos. Demo checkout never charges money.</p></article></main></AppLayout>;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      if (mode === 'login') await login(email, password);
+      else await register(name, email, password);
+    } catch {
+      // AuthContext exposes the server message.
+    }
+  };
+  if (isLoading) return <AppLayout><main className="page-frame"><div className="page-skeleton" /></main></AppLayout>;
+  if (!user) return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Crew access</div><h1>{mode === 'login' ? 'Log in' : 'Create account'}</h1></div></section><article className="surface-card auth-card"><div className="card-label">Save your eSIMs across devices</div><h2 className="plan-name">{mode === 'login' ? 'Welcome back, crew.' : 'Keep your connection close.'}</h2><p className="lookup-note">Guest access stays open for browsing, purchase, and ICCID lookup. Create an account when you want persistent orders and dashboard data.</p><form className="auth-form" onSubmit={submit}>{mode === 'register' && <label>Name<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="Your name" required /></label>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="At least 8 characters" minLength={8} required /></label>{error && <div className="modal-error" role="alert">{error}</div>}<button className="button-primary" type="submit">{mode === 'login' ? 'Log in' : 'Create account'} <ArrowRight size={14} /></button></form><div className="auth-switch"><button type="button" onClick={() => { clearError(); setMode(mode === 'login' ? 'register' : 'login'); }}>{mode === 'login' ? 'Need an account? Create one' : 'Already registered? Log in'}</button><Link href="/" className="button-quiet">Continue as guest</Link></div></article></main></AppLayout>;
+  return <AppLayout><main className="page-frame"><section className="page-heading"><div><div className="section-kicker">Crew settings</div><h1>Account</h1></div><button className="button-quiet" onClick={() => void logout()}>Log out</button></section><article className="surface-card"><div className="card-label">{user.role === 'admin' ? 'Administrator account' : 'Customer account'}</div><h2 className="plan-name">Welcome, {user.name}</h2><p className="lookup-note">{user.email}</p><div className="help-grid"><button className="help-tile" onClick={() => setSupportMessage('Support contact is not connected in this demo.')}><HelpCircle size={17} /><strong>Get help</strong><span>Installation and carrier guidance</span></button><button className="help-tile" onClick={() => setSupportMessage('Network status is available from each live order detail page.')}><Settings2 size={17} /><strong>Network status</strong><span>Check provisioning details</span></button></div>{user.role === 'admin' && <Link href="/admin" className="admin-link"><BarChart3 size={16} /> Open admin dashboard <ArrowRight size={13} /></Link>}{supportMessage && <p className="lookup-note" role="status">{supportMessage}</p>}</article><article className="surface-card"><div className="card-label">Pricing note</div><h2 className="plan-name">Clear numbers, no surprises</h2><p className="lookup-note">Customer-facing prices are shown in Philippine pesos. Demo checkout never charges money.</p></article></main></AppLayout>;
+}
+
+type AdminPlan = { packageCode: string; name: string; location: string; dataGb: number; duration: number; durationUnit: string; providerPricePhp: number; markupPhp: number; sellingPricePhp: number | null; customerPricePhp: number; enabled: boolean };
+type AdminOverview = { totalOrders: number; totalCustomers: number; totalEsimsSold: number; activeEsims: number; revenuePhp: number; recentOrders: Array<{ orderNo: string; packageName: string; location: string; amountPhp: number; paymentStatus: string; esimStatus: string; createdAt: string }> };
+
+function AdminPage() {
+  const { user } = useAuth();
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [plans, setPlans] = useState<AdminPlan[]>([]);
+  const [logs, setLogs] = useState<Array<Record<string, unknown>>>([]);
+  const [error, setError] = useState('');
+  const refresh = useCallback(async () => {
+    try {
+      const [nextOverview, nextPlans, nextLogs] = await Promise.all([
+        requestJson<AdminOverview>('/api/admin/overview'),
+        requestJson<{ plans: AdminPlan[] }>('/api/admin/plans'),
+        requestJson<{ logs: Array<Record<string, unknown>> }>('/api/admin/activity'),
+      ]);
+      setOverview(nextOverview); setPlans(nextPlans.plans); setLogs(nextLogs.logs);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Admin data could not be loaded'); }
+  }, []);
+  useEffect(() => { if (user?.role === 'admin') void refresh(); }, [refresh, user?.role]);
+  if (!user || user.role !== 'admin') return <AppLayout><main className="page-frame"><div className="error-state"><span className="state-icon"><CircleAlert size={21} /></span><h3>Admin access required</h3><p>This dashboard is only available to authorized administrators.</p><Link href="/account" className="button-dark">Back to account</Link></div></main></AppLayout>;
+  const updatePlan = async (plan: AdminPlan, field: 'markupPhp' | 'sellingPricePhp' | 'enabled', value: string | boolean) => {
+    const numberValue = typeof value === 'boolean' ? null : Number(value);
+    if (field !== 'enabled' && (numberValue === null || !Number.isFinite(numberValue) || numberValue < 0)) return;
+    const result = await requestJson<{ markupPhp: number; sellingPricePhp: number | null; customerPricePhp: number; enabled: boolean }>(`/api/admin/plans/${encodeURIComponent(plan.packageCode)}`, { method: 'PATCH', body: JSON.stringify({ [field]: field === 'enabled' ? value : numberValue }) });
+    setPlans((current) => current.map((item) => item.packageCode === plan.packageCode ? { ...item, ...result } : item));
+    void refresh();
+  };
+  return <AppLayout><main className="page-frame admin-page"><section className="page-heading"><div><div className="section-kicker">Restricted workspace</div><h1>Admin dashboard</h1></div><button className="button-quiet" onClick={() => void refresh()}><RefreshCw size={14} /> Refresh</button></section>{error && <div className="modal-error">{error}</div>}{overview && <><div className="admin-stat-grid">{[['Orders', overview.totalOrders], ['Customers', overview.totalCustomers], ['eSIMs sold', overview.totalEsimsSold], ['Active eSIMs', overview.activeEsims], ['Revenue', formatPhp(overview.revenuePhp)]].map(([label, value]) => <div className="admin-stat" key={String(label)}><span>{label}</span><strong>{value}</strong></div>)}</div><article className="surface-card"><div className="card-label">Recent orders</div><div className="order-list">{overview.recentOrders.map((order) => <div className="order-list-item" key={order.orderNo}><div><strong>{order.packageName}</strong><span>{order.location} · {order.orderNo} · {formatPhp(order.amountPhp)}</span></div><span className="status-badge status-pending">{order.paymentStatus}</span></div>)}</div></article></> }<article className="surface-card"><div className="card-label">Plan management</div><h2 className="plan-name">Customer pricing</h2><p className="lookup-note">Provider cost stays in this protected admin view. Customers only receive the final selling price.</p><div className="admin-plan-list">{plans.map((plan) => <div className="admin-plan-row" key={plan.packageCode}><div><strong>{plan.name}</strong><span>{plan.location} · {plan.dataGb} GB · {plan.duration} {plan.durationUnit}</span></div><div className="admin-price-fields"><label>Markup<input type="number" min="0" step="1" value={plan.markupPhp} onChange={(event) => void updatePlan(plan, 'markupPhp', event.target.value)} /></label><label>Selling price<input type="number" min="0" step="1" value={plan.sellingPricePhp ?? ''} placeholder="Markup price" onChange={(event) => void updatePlan(plan, 'sellingPricePhp', event.target.value)} /></label><b>{formatPhp(plan.customerPricePhp)}</b><button className="button-quiet plan-status-button" type="button" onClick={() => void updatePlan(plan, 'enabled', !plan.enabled)}>{plan.enabled ? 'Enabled' : 'Disabled'}</button></div></div>)}</div></article><article className="surface-card"><div className="card-label">Activity log</div><h2 className="plan-name">Recent admin actions</h2><div className="activity-list">{logs.slice(0, 20).map((log, index) => <div className="activity-row" key={String(log.id ?? index)}><span>{log.createdAt ? new Date(String(log.createdAt)).toLocaleString() : '—'}</span><strong>{String(log.action ?? 'Activity')}</strong><small>{String(log.actor ?? 'Unknown')} · {String(log.result ?? '—')}</small></div>)}</div></article></main></AppLayout>;
 }
 
 function GuestPage() {
@@ -397,11 +592,11 @@ function OrderPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Catalog} /><Route path="/esims" component={EsimsPage} /><Route path="/orders" component={OrdersPage} /><Route path="/account" component={AccountPage} /><Route path="/guest" component={GuestPage} /><Route path="/order/:orderNo" component={OrderPage} /><Route component={() => <div className="page-frame"><div className="error-state"><span className="state-icon"><CircleAlert size={21} /></span><h3>That page is off the route</h3><p>Return home to browse connectivity plans.</p><Link href="/" className="button-dark">Go home</Link></div></div>} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Catalog} /><Route path="/esims" component={EsimsPage} /><Route path="/orders" component={OrdersPage} /><Route path="/account" component={AccountPage} /><Route path="/admin" component={AdminPage} /><Route path="/guest" component={GuestPage} /><Route path="/order/:orderNo" component={OrderPage} /><Route component={() => <div className="page-frame"><div className="error-state"><span className="state-icon"><CircleAlert size={21} /></span><h3>That page is off the route</h3><p>Return home to browse connectivity plans.</p><Link href="/" className="button-dark">Go home</Link></div></div>} /></Switch></ErrorBoundary>;
 }
 
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  return <AuthProvider><QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider></AuthProvider>;
 }
 
 export default App;

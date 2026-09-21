@@ -14,6 +14,10 @@ function customerPricePhp(priceUsd: number): number {
   return Math.round((priceUsd * exchangeRate + markupPhp) * 100) / 100;
 }
 
+function providerPricePhp(priceUsd: number): number {
+  return Math.round(priceUsd * numericEnv("ESIM_USD_TO_PHP", DEFAULT_USD_TO_PHP) * 100) / 100;
+}
+
 type ProviderResponse<T> = {
   success?: boolean;
   errorCode?: string | null;
@@ -151,6 +155,7 @@ export function formatPlan(plan: EsimPackage) {
     name: asString(plan.name, "Travel eSIM"),
     location: asString(plan.location),
     pricePhp: customerPricePhp(priceUsd),
+    providerPricePhp: providerPricePhp(priceUsd),
     priceUsd,
     volumeBytes,
     dataGb: volumeBytes / 1024 ** 3,
