@@ -225,22 +225,17 @@ export async function listAllOrders(limit = 20) {
   return db.select().from(orders).orderBy(desc(orders.createdAt)).limit(limit);
 }
 
-export async function countTable(table: typeof customers | typeof orders) {
-  const result = await db.select({ count: sql<number>`count(*)` }).from(table);
-  return Number(result[0]?.count ?? 0);
-}
-
 export async function getAdminStats() {
-  const [customerCount, orderCount, activeCount, revenue] = await Promise.all([
-    countTable(customers),
-    countTable(orders),
+  const [customerCountResult, orderCountResult, activeCount, revenue] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(customers),
+    db.select({ count: sql<number>`count(*)` }).from(orders),
     db.select({ count: sql<number>`count(*)` }).from(orders).where(sql`${orders.iccid} is not null and ${orders.esimStatus} not in ('EXPIRED', 'FAILED')`),
     db.select({ total: sql<string>`coalesce(sum(${orders.amountPhp}), 0)` }).from(orders).where(eq(orders.paymentStatus, "PAID")),
   ]);
   return {
-    totalCustomers: customerCount,
-    totalOrders: orderCount,
-    totalEsimsSold: orderCount,
+    totalCustomers: Number(customerCountResult[0]?.count ?? 0),
+    totalOrders: Number(orderCountResult[0]?.count ?? 0),
+    totalEsimsSold: Number(orderCountResult[0]?.count ?? 0),
     activeEsims: Number(activeCount[0]?.count ?? 0),
     revenuePhp: Number(revenue[0]?.total ?? 0),
   };
